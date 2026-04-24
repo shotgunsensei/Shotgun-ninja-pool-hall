@@ -18,6 +18,7 @@ import {
   BALL_RADIUS,
   POCKETS,
   POCKET_RADIUS,
+  SIM_TICK_MS,
   simulateShot,
   predictAimLine,
   findFreeSpot,
@@ -110,7 +111,11 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
     makeInitialGameState(makeInitialBalls(), playerNames),
   );
 
-  // Aim/power UI state
+  // Aim/power UI state. The cue stick is drawn whenever it's this seat's
+  // turn and a shot is feasible — `active` simply tracks whether the user
+  // has dragged at least once (used to surface the dashed aim guide). The
+  // angle persists across shots so the cue stick stays visible and players
+  // don't accidentally swing it around with stray taps.
   const [aim, setAim] = useState<AimState>({ active: false, point: { x: 600, y: 250 } });
   const [power, setPower] = useState(0.55);
   const [animating, setAnimating] = useState(false);
@@ -243,15 +248,15 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
       positions.set(b.id, p);
     }
 
-    // Aim guide (draw before balls so balls float on top)
+    // The cue stick & aim guide should be visible any time it's this seat's
+    // turn, the cue ball is on the table, and we're not mid-animation.
+    // Ball-in-hand is the one exception (player must place the cue first).
     const cuePos = positions.get(0);
-    if (
-      myTurn &&
-      cuePos &&
-      !animating &&
-      settings.aimGuide &&
-      aim.active
-    ) {
+    const showAim =
+      myTurn && cuePos !== undefined && !animating && !state.ballInHand;
+
+    // Aim guide (draw before balls so balls float on top)
+    if (showAim && cuePos && settings.aimGuide) {
       const dx = aim.point.x - cuePos.x;
       const dy = aim.point.y - cuePos.y;
       const lenA = Math.hypot(dx, dy);
@@ -280,8 +285,13 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
       drawBall(ctx, id, p);
     }
 
-    // Cue stick (only when aiming and not animating)
-    if (myTurn && cuePos && !animating && aim.active) {
+    // Cue stick — drawn whenever it's our turn (always visible during aim).
+    // The stick lives entirely behind the cue ball, in direction (-ux, -uy).
+    // We split the available "behind room" between an initial pull-back gap
+    // (so the tip doesn't touch the cue at full power) and the stick body.
+    // Both are shrunk together if the cue ball is up against a rail so the
+    // stick (or at least its tip) always stays on-canvas.
+    if (showAim && cuePos) {
       const dx = aim.point.x - cuePos.x;
       const dy = aim.point.y - cuePos.y;
       const lenA = Math.hypot(dx, dy);
@@ -289,20 +299,45 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
         const ux = dx / lenA;
         const uy = dy / lenA;
         const back = 18 + power * 50;
-        const start = { x: cuePos.x - ux * (BALL_RADIUS + back), y: cuePos.y - uy * (BALL_RADIUS + back) };
-        const tail = { x: start.x - ux * 320, y: start.y - uy * 320 };
-        const grad2 = ctx.createLinearGradient(start.x, start.y, tail.x, tail.y);
-        grad2.addColorStop(0, "#f1b46e");
-        grad2.addColorStop(0.4, "#a3673a");
-        grad2.addColorStop(1, "#3b2418");
-        ctx.strokeStyle = grad2;
-        ctx.lineWidth = 5;
-        ctx.lineCap = "round";
-        ctx.beginPath();
-        ctx.moveTo(start.x, start.y);
-        ctx.lineTo(tail.x, tail.y);
-        ctx.stroke();
-        // Tip
+        const idealGap = BALL_RADIUS + back;
+        const idealStick = 320;
+        const margin = 6;
+
+        // How far we can travel from the cue ball along (-ux, -uy) before
+        // hitting the canvas edge (with `margin` of slack). Math.min ignores
+        // any +Infinity terms produced when ux or uy is 0.
+        let maxBehind = Infinity;
+        if (-ux > 0) maxBehind = Math.min(maxBehind, (TABLE_WIDTH - margin - cuePos.x) / -ux);
+        if (-ux < 0) maxBehind = Math.min(maxBehind, (margin - cuePos.x) / -ux);
+        if (-uy > 0) maxBehind = Math.min(maxBehind, (TABLE_HEIGHT - margin - cuePos.y) / -uy);
+        if (-uy < 0) maxBehind = Math.min(maxBehind, (margin - cuePos.y) / -uy);
+        if (!Number.isFinite(maxBehind)) maxBehind = idealGap + idealStick;
+
+        const totalBehind = Math.max(0, Math.min(idealGap + idealStick, maxBehind));
+        const startGap = Math.min(idealGap, totalBehind);
+        const stickLen = Math.max(0, totalBehind - startGap);
+
+        const start = {
+          x: cuePos.x - ux * startGap,
+          y: cuePos.y - uy * startGap,
+        };
+
+        if (stickLen >= 4) {
+          const tail = { x: start.x - ux * stickLen, y: start.y - uy * stickLen };
+          const grad2 = ctx.createLinearGradient(start.x, start.y, tail.x, tail.y);
+          grad2.addColorStop(0, "#f1b46e");
+          grad2.addColorStop(0.4, "#a3673a");
+          grad2.addColorStop(1, "#3b2418");
+          ctx.strokeStyle = grad2;
+          ctx.lineWidth = 5;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(start.x, start.y);
+          ctx.lineTo(tail.x, tail.y);
+          ctx.stroke();
+        }
+        // Tip — always shown so the player can see exactly where the cue
+        // is hitting even when the stick has been shortened to nothing.
         ctx.fillStyle = "#3a4a6f";
         ctx.beginPath();
         ctx.arc(start.x, start.y, 3, 0, Math.PI * 2);
@@ -323,6 +358,12 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
 
   function drawBall(ctx: CanvasRenderingContext2D, id: number, p: Vec2): void {
     const color = BALL_COLORS[id] ?? "#fff";
+    const stripe = isStripe(id);
+    // For stripes, body is white and the ball's color shows only as the
+    // equatorial band — matches real stripe billiard balls and is much
+    // easier to tell apart from solids at small sizes.
+    const bodyColor = stripe ? "#f5f3ee" : color;
+
     // Shadow
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.beginPath();
@@ -330,21 +371,28 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
     ctx.fill();
 
     // Body
-    ctx.fillStyle = color;
+    ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.arc(p.x, p.y, BALL_RADIUS, 0, Math.PI * 2);
     ctx.fill();
 
+    // Equatorial colored band for stripe balls
+    if (stripe) {
+      ctx.save();
+      // Clip to a horizontal band ~60% of the ball's diameter, then fill
+      // the whole circle with the team color so the band conforms to the
+      // ball's curvature.
+      ctx.beginPath();
+      ctx.rect(p.x - BALL_RADIUS, p.y - BALL_RADIUS * 0.55, BALL_RADIUS * 2, BALL_RADIUS * 1.1);
+      ctx.clip();
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, BALL_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     if (id !== 0 && id !== 8) {
-      if (isStripe(id)) {
-        // Stripe: white band top and bottom
-        ctx.fillStyle = "#f5f3ee";
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, BALL_RADIUS, Math.PI * 1.15, Math.PI * 1.85);
-        ctx.arc(p.x, p.y, BALL_RADIUS, Math.PI * 0.15, Math.PI * 0.85, true);
-        ctx.closePath();
-        ctx.fill();
-      }
       // Number circle
       ctx.fillStyle = "#f5f3ee";
       ctx.beginPath();
@@ -367,7 +415,7 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
       ctx.fillText("8", p.x, p.y + 0.5);
     }
 
-    // Highlight
+    // Specular highlight
     ctx.fillStyle = "rgba(255,255,255,0.35)";
     ctx.beginPath();
     ctx.ellipse(p.x - BALL_RADIUS * 0.35, p.y - BALL_RADIUS * 0.4, BALL_RADIUS * 0.3, BALL_RADIUS * 0.18, 0, 0, Math.PI * 2);
@@ -448,72 +496,101 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
   }
 
   // ----- Shot execution -----
+  // Playback speed multiplier: 1.0 = match the simulation's wall-clock pace
+  // (sim ticks at 60 Hz). >1 = faster than realtime (snappier feel).
+  const PLAYBACK_SPEED = 1.25;
+  // Capture every Nth physics tick. 2 keeps motion smooth (~30 effective fps
+  // of recorded data, played back at 1.25x) while halving snapshot cost on
+  // low-end devices.
+  const FRAME_INTERVAL = 2;
+
   const animateShot = useCallback(
-    (startState: GameState, shot: Shot): Promise<{ finalState: GameState; events: ReturnType<typeof simulateShot>["events"] }> => {
-      const { finalState, events } = simulateShot(startState, shot, {
+    (
+      startState: GameState,
+      shot: Shot,
+    ): Promise<{ finalState: GameState; events: ReturnType<typeof simulateShot>["events"] }> => {
+      // Run the deterministic simulation and capture per-tick frames so we
+      // can replay the actual ball motion (collisions, rail bounces,
+      // deflections) instead of just lerping from start to final positions.
+      const sim = simulateShot(startState, shot, {
         tableSpeed: settings.tableSpeed,
+        recordFrames: true,
+        frameInterval: FRAME_INTERVAL,
       });
+      const { finalState, events, frames, firstContactTick, pocketTicks, ticks } = sim;
 
-      // For animation we re-run the simulation tick-by-tick, but more cheaply
-      // we just interpolate from start positions to final positions over a
-      // duration proportional to the shot's "travel".
-      const startPositions = new Map<number, Vec2>();
-      for (const b of startState.balls) {
-        if (!b.inPocket) startPositions.set(b.id, { x: b.pos.x, y: b.pos.y });
-      }
+      // Each recorded frame represents FRAME_INTERVAL sim ticks. Convert
+      // (frame index) -> wall-clock ms, adjusted by playback speed.
+      const tickToMs = SIM_TICK_MS / PLAYBACK_SPEED;
+      const frameToMs = FRAME_INTERVAL * tickToMs;
 
-      // Estimate animation duration: longer for harder shots.
-      const duration = 800 + shot.power * 1600;
-
-      // Schedule sound effects roughly: cue strike now, pocket sounds spread out.
+      // Cue strike + haptic fire immediately
       sfxCue(shot.power, settings.sound);
       vibrate(Math.floor(15 + shot.power * 25), settings.vibration);
-      // Approximate first contact / pocket sounds at 30% / 60% of duration
-      if (events.firstContact !== null) {
-        setTimeout(() => sfxClack(shot.power, settings.sound), duration * 0.3);
+
+      // Schedule sounds at the actual moments they happen in the simulation.
+      const timers: number[] = [];
+      if (firstContactTick !== null) {
+        timers.push(
+          window.setTimeout(
+            () => sfxClack(shot.power, settings.sound),
+            firstContactTick * tickToMs,
+          ),
+        );
       }
-      events.pocketed.forEach((_id, idx) => {
-        setTimeout(() => sfxPocket(settings.sound), duration * (0.55 + idx * 0.1));
+      pocketTicks.forEach((t) => {
+        timers.push(window.setTimeout(() => sfxPocket(settings.sound), t * tickToMs));
       });
 
-      // Run two-phase tween: balls travel from start to a "midstate" (just past
-      // first contact, approximated as 35%) using linear motion, then to final.
-      // To keep things simple we use a single ease-out interpolation per ball.
-      // Pocketed balls fade out near the end of their travel.
       const animationStart = performance.now();
+      const totalDuration = Math.max(1, ticks * tickToMs);
 
       return new Promise((resolve) => {
-        animRef.current.active = true;
-        function step(now: number): void {
-          const t = Math.min(1, (now - animationStart) / duration);
-          // Ease out cubic
-          const e = 1 - (1 - t) ** 3;
+        // If somehow no frames were captured, short-circuit to the final
+        // state so we don't try to play back nothing. (Defensive — the
+        // simulation always records at least the t=0 frame when
+        // `recordFrames: true`.)
+        if (!frames || frames.length === 0) {
+          for (const t of timers) clearTimeout(t);
+          // Snap balls to final positions
           const map = new Map<number, Vec2>();
           for (const b of finalState.balls) {
-            const start = startPositions.get(b.id);
-            if (!start) continue;
-            if (b.inPocket) {
-              if (t < 0.95) {
-                map.set(b.id, {
-                  x: start.x + (b.pos.x - start.x) * e,
-                  y: start.y + (b.pos.y - start.y) * e,
-                });
-              }
-            } else {
-              map.set(b.id, {
-                x: start.x + (b.pos.x - start.x) * e,
-                y: start.y + (b.pos.y - start.y) * e,
-              });
-            }
+            if (!b.inPocket) map.set(b.id, { x: b.pos.x, y: b.pos.y });
           }
           animRef.current.ballPositions = map;
-          if (t < 1) {
-            requestAnimationFrame(step);
-          } else {
+          animRef.current.active = false;
+          resolve({ finalState, events });
+          return;
+        }
+
+        animRef.current.active = true;
+
+        function applyFrame(idx: number): void {
+          const safeIdx = Math.max(0, Math.min(idx, frames.length - 1));
+          const frame = frames[safeIdx];
+          if (!frame) return;
+          const map = new Map<number, Vec2>();
+          for (const pos of frame.positions) {
+            if (pos.inPocket) continue;
+            map.set(pos.id, { x: pos.x, y: pos.y });
+          }
+          animRef.current.ballPositions = map;
+        }
+
+        function step(now: number): void {
+          const elapsed = now - animationStart;
+          // Each recorded frame represents FRAME_INTERVAL sim ticks.
+          const frameIdx = Math.floor(elapsed / frameToMs);
+          if (elapsed >= totalDuration || frameIdx >= frames.length) {
+            applyFrame(frames.length - 1);
             animRef.current.active = false;
             resolve({ finalState, events });
+            return;
           }
+          applyFrame(frameIdx);
+          requestAnimationFrame(step);
         }
+
         requestAnimationFrame(step);
       });
     },
@@ -570,7 +647,9 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
         setStatusMsg(summary.join(" — "));
 
         setState(resolved.state);
-        setAim({ active: false, point: { x: 600, y: 250 } });
+        // Keep the previous aim direction across shots so the cue stick stays
+        // visible & oriented; the player can drag to re-aim when ready.
+        setAim((prev) => ({ ...prev, active: false }));
 
         // For host-authoritative online play, broadcast the new state after a shot.
         if (
@@ -635,7 +714,9 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
       if (!network.onRemoteState) return;
       const off = network.onRemoteState((newState) => {
         setState(newState);
-        setAim({ active: false, point: { x: 600, y: 250 } });
+        // Preserve the guest's aim direction across remote state updates so
+        // the cue stick keeps its orientation between turns/shots.
+        setAim((prev) => ({ ...prev, active: false }));
         setAnimating(false);
         setStatusMsg(
           newState.gameOver

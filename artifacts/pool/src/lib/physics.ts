@@ -29,13 +29,16 @@ export const POCKETS: Vec2[] = [
   { x: PLAY_RIGHT, y: PLAY_BOTTOM },
 ];
 
-const FRICTION = 0.985; // per physics tick at 60 Hz
+const FRICTION = 0.991; // per physics tick at 60 Hz (closer to 1 = more roll)
 const MIN_SPEED = 0.05; // below this, snap to zero
 const RESTITUTION_BALL = 0.95;
 const RESTITUTION_RAIL = 0.78;
-const MAX_LAUNCH_SPEED = 28; // logical units / tick at full power
+const MAX_LAUNCH_SPEED = 38; // logical units / tick at full power
 const PHYSICS_DT = 1; // virtual ticks; we use a fixed iteration loop
 const MAX_TICKS = 6000; // safety cap (~100s at 60Hz)
+/** One simulation tick = 1/60 s of game time. Used to convert tick numbers
+ *  to wall-clock playback time. */
+export const SIM_TICK_MS = 1000 / 60;
 
 // Sub-stepping: we move by small fractional steps inside each tick to avoid
 // tunnelling at high speeds.
@@ -297,6 +300,32 @@ function allStopped(balls: Ball[]): boolean {
 export interface SimulateOptions {
   /** Multiplies the effective friction (lower table speed = more friction). */
   tableSpeed?: number;
+  /** If true, every Nth tick of the simulation is captured into `frames`
+   *  so the UI can play back the actual ball motion instead of lerping
+   *  between start and end. */
+  recordFrames?: boolean;
+  /** How many simulation ticks per recorded frame. Default 1 (60 fps). */
+  frameInterval?: number;
+}
+
+/** A snapshot of all ball positions at one point during the simulation. */
+export interface SimulationFrame {
+  /** Tick number this frame was captured at. */
+  tick: number;
+  positions: { id: number; x: number; y: number; inPocket: boolean }[];
+}
+
+export interface SimulateResult {
+  finalState: GameState;
+  events: ShotEvents;
+  /** Total number of physics ticks the simulation ran. */
+  ticks: number;
+  /** Per-frame snapshots (empty if `recordFrames` was not set). */
+  frames: SimulationFrame[];
+  /** Tick number at which the cue first contacted an object ball, or null. */
+  firstContactTick: number | null;
+  /** Tick number at which each pocket happened, in pocketing order. */
+  pocketTicks: number[];
 }
 
 /**
@@ -312,7 +341,7 @@ export function simulateShot(
   state: GameState,
   shot: Shot,
   opts: SimulateOptions = {},
-): { finalState: GameState; events: ShotEvents } {
+): SimulateResult {
   // Deep clone balls
   const balls: Ball[] = state.balls.map((b) => ({
     id: b.id,
@@ -348,21 +377,46 @@ export function simulateShot(
   };
 
   const tableSpeed = opts.tableSpeed ?? 1;
-  // Higher table speed -> less friction. tableSpeed=1 -> 0.985 baseline.
+  // Higher table speed -> less friction. tableSpeed=1 -> baseline FRICTION.
   const friction = Math.min(0.999, 1 - (1 - FRICTION) / Math.max(0.4, tableSpeed));
 
-  for (let tick = 0; tick < MAX_TICKS; tick += 1) {
+  const recordFrames = opts.recordFrames === true;
+  const frameInterval = Math.max(1, opts.frameInterval ?? 1);
+  const frames: SimulationFrame[] = [];
+  let firstContactTick: number | null = null;
+  const pocketTicks: number[] = [];
+
+  function snapshot(tick: number): SimulationFrame {
+    return {
+      tick,
+      positions: balls.map((b) => ({
+        id: b.id,
+        x: b.pos.x,
+        y: b.pos.y,
+        inPocket: b.inPocket,
+      })),
+    };
+  }
+
+  // Frame at tick 0 (initial state with cue velocity assigned)
+  if (recordFrames) frames.push(snapshot(0));
+
+  let lastTick = 0;
+  for (let tick = 1; tick <= MAX_TICKS; tick += 1) {
     const result = stepBalls(balls, friction);
+    lastTick = tick;
 
     // Track first contact
     if (events.firstContact === null) {
       for (const c of result.collisions) {
         if (c.a === 0 && c.b !== 0) {
           events.firstContact = c.b;
+          firstContactTick = tick;
           break;
         }
         if (c.b === 0 && c.a !== 0) {
           events.firstContact = c.a;
+          firstContactTick = tick;
           break;
         }
       }
@@ -377,9 +431,19 @@ export function simulateShot(
 
     for (const id of result.pocketed) {
       events.pocketed.push(id);
+      pocketTicks.push(tick);
+    }
+
+    if (recordFrames && tick % frameInterval === 0) {
+      frames.push(snapshot(tick));
     }
 
     if (allStopped(balls)) break;
+  }
+
+  // Always include a final frame at the resting state.
+  if (recordFrames && (frames.length === 0 || frames[frames.length - 1]!.tick !== lastTick)) {
+    frames.push(snapshot(lastTick));
   }
 
   const finalState: GameState = {
@@ -387,7 +451,7 @@ export function simulateShot(
     balls,
   };
 
-  return { finalState, events };
+  return { finalState, events, ticks: lastTick, frames, firstContactTick, pocketTicks };
 }
 
 /**
