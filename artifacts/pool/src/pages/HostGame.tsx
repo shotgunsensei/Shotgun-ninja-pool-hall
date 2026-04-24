@@ -14,6 +14,11 @@ export default function HostGame(): JSX.Element {
   const [code, setCode] = useState<string>("");
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [peerConnected, setPeerConnected] = useState(false);
+  // Once a guest has joined we consider the match "started". From then on we
+  // keep PoolGame mounted (and therefore preserve authoritative game state)
+  // even if the guest's connection briefly drops, so the match resumes on
+  // reconnect instead of resetting.
+  const [gameStarted, setGameStarted] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [errorMsg, setErrorMsg] = useState<string>("");
   const netRef = useRef<PoolNet | null>(null);
@@ -37,10 +42,14 @@ export default function HostGame(): JSX.Element {
           const allConnected =
             msg.state.players.length >= 2 && msg.state.players.every((p) => p.connected);
           setPeerConnected(allConnected);
+          if (allConnected) setGameStarted(true);
         } else if (msg.type === "peerUpdate") {
           const allConnected =
             msg.state.players.length >= 2 && msg.state.players.every((p) => p.connected);
           setPeerConnected(allConnected);
+          // Once the guest has joined for the first time, lock in "started"
+          // so a subsequent disconnect does not unmount the game.
+          if (allConnected) setGameStarted(true);
           // If the guest just (re)connected and we have an in-flight game,
           // re-broadcast the current authoritative state so they catch up.
           if (allConnected && latestStateRef.current) {
@@ -112,7 +121,11 @@ export default function HostGame(): JSX.Element {
   );
 
   // ----- Lobby vs Game -----
-  if (!peerConnected) {
+  // Show the lobby only until the guest joins for the first time. After that,
+  // a brief disconnect should NOT collapse back into the lobby (which would
+  // unmount PoolGame and reset the match) — instead we keep PoolGame mounted
+  // and surface a small "Opponent disconnected" banner.
+  if (!gameStarted) {
     return (
       <div className="min-h-[100dvh] w-full flex flex-col">
         <header className="px-3 pt-3 pb-2 flex items-center gap-2 border-b border-card-border bg-card/70">
@@ -203,6 +216,15 @@ export default function HostGame(): JSX.Element {
 
   return (
     <div className="h-[100dvh] w-full flex flex-col">
+      {!peerConnected && (
+        <div
+          className="px-3 py-1.5 text-center text-xs bg-amber-500/15 text-amber-200 border-b border-amber-500/30"
+          data-testid="banner-peer-disconnected"
+        >
+          <WifiOff className="inline h-3.5 w-3.5 mr-1 align-text-bottom" />
+          Opponent disconnected — waiting for them to reconnect…
+        </div>
+      )}
       <PoolGame
         mode="online-host"
         playerNames={["Host", "Guest"]}

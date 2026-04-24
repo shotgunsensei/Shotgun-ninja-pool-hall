@@ -16,6 +16,10 @@ export default function JoinGame(): JSX.Element {
   const [submitted, setSubmitted] = useState(false);
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [peerConnected, setPeerConnected] = useState(false);
+  // Once both peers have connected for the first time the match is "started";
+  // keep PoolGame mounted from then on so a brief host disconnect does not
+  // unmount/reset the in-flight game.
+  const [gameStarted, setGameStarted] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
   const netRef = useRef<PoolNet | null>(null);
 
@@ -46,12 +50,23 @@ export default function JoinGame(): JSX.Element {
       },
       onMessage: (msg: ServerMessage) => {
         if (msg.type === "joined") {
-          setPeerConnected(msg.state.players.length >= 2 && msg.state.players.every((p) => p.connected));
+          const both =
+            msg.state.players.length >= 2 && msg.state.players.every((p) => p.connected);
+          setPeerConnected(both);
+          if (both) setGameStarted(true);
           // Ask the host for the latest authoritative state. Handles fresh
           // joins as well as mid-game reconnects.
           netRef.current?.send({ kind: "stateRequest" });
         } else if (msg.type === "peerUpdate") {
-          setPeerConnected(msg.state.players.length >= 2 && msg.state.players.every((p) => p.connected));
+          const both =
+            msg.state.players.length >= 2 && msg.state.players.every((p) => p.connected);
+          setPeerConnected(both);
+          if (both) {
+            setGameStarted(true);
+            // Re-ask the host for state in case we missed updates while the
+            // peer was away.
+            netRef.current?.send({ kind: "stateRequest" });
+          }
         } else if (msg.type === "error") {
           setErrorMsg(msg.error);
           setSubmitted(false);
@@ -96,7 +111,7 @@ export default function JoinGame(): JSX.Element {
     [],
   );
 
-  if (!submitted || !peerConnected) {
+  if (!submitted || !gameStarted) {
     return (
       <div className="min-h-[100dvh] w-full flex flex-col">
         <header className="px-3 pt-3 pb-2 flex items-center gap-2 border-b border-card-border bg-card/70">
@@ -177,6 +192,15 @@ export default function JoinGame(): JSX.Element {
 
   return (
     <div className="h-[100dvh] w-full flex flex-col">
+      {!peerConnected && (
+        <div
+          className="px-3 py-1.5 text-center text-xs bg-amber-500/15 text-amber-200 border-b border-amber-500/30"
+          data-testid="banner-peer-disconnected"
+        >
+          <WifiOff className="inline h-3.5 w-3.5 mr-1 align-text-bottom" />
+          Host disconnected — waiting for them to reconnect…
+        </div>
+      )}
       <PoolGame
         mode="online-guest"
         playerNames={["Host", "Guest"]}

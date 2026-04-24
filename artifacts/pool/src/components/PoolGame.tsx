@@ -581,11 +581,24 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
   useEffect(() => {
     if (!network) return;
     if (mode === "online-host") {
-      // Host receives shot intents from guest
+      // Host receives shot intents from guest. Validate authoritatively
+      // before simulating: ignore stale (out-of-turn) intents, and snap any
+      // guest-supplied cue placement to a legal free spot inside the play
+      // area so a malicious or buggy guest cannot place the cue ball off the
+      // table or overlapping another ball.
       const off = network.onRemoteShot((shot) => {
-        // Validate it's the guest's turn
         if (state.currentPlayer === localSeat) return; // ignore stale
-        void performShot(shot, true);
+        let validated: Shot = shot;
+        if (shot.cuePlacement) {
+          if (!state.ballInHand) {
+            // Cue placement only allowed when ball-in-hand is in effect.
+            validated = { angle: shot.angle, power: shot.power };
+          } else {
+            const safe = findFreeSpot(state, shot.cuePlacement);
+            validated = { ...shot, cuePlacement: safe };
+          }
+        }
+        void performShot(validated, true);
       });
       return off;
     }

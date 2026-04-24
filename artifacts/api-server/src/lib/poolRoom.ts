@@ -110,21 +110,44 @@ function attachClientToRoom(
     return { ok: true, role: existing.role };
   }
 
-  // New client
+  // New client. If a player slot of the requested role exists but is
+  // disconnected (e.g. the original guest closed the tab), allow this new
+  // client to take over that slot. This makes rejoining a room from a fresh
+  // browser session "just work" instead of returning "Room is full".
   if (preferRole === "host") {
-    if (room.players.some((p) => p.role === "host")) {
+    const liveHost = room.players.find(
+      (p) => p.role === "host" && p.ws && p.alive,
+    );
+    if (liveHost) {
       return { ok: false, error: "Host slot already taken" };
+    }
+    const staleHost = room.players.find((p) => p.role === "host");
+    if (staleHost) {
+      staleHost.id = clientId;
+      staleHost.ws = ctx.ws;
+      staleHost.alive = true;
+      return { ok: true, role: "host" };
     }
     room.players.push({ id: clientId, ws: ctx.ws, role: "host", alive: true });
     return { ok: true, role: "host" };
   }
 
   // Guest
-  if (room.players.some((p) => p.role === "guest")) {
+  const liveGuest = room.players.find(
+    (p) => p.role === "guest" && p.ws && p.alive,
+  );
+  if (liveGuest) {
     return { ok: false, error: "Room is full" };
   }
   if (!room.players.some((p) => p.role === "host")) {
     return { ok: false, error: "No host in room" };
+  }
+  const staleGuest = room.players.find((p) => p.role === "guest");
+  if (staleGuest) {
+    staleGuest.id = clientId;
+    staleGuest.ws = ctx.ws;
+    staleGuest.alive = true;
+    return { ok: true, role: "guest" };
   }
   room.players.push({ id: clientId, ws: ctx.ws, role: "guest", alive: true });
   return { ok: true, role: "guest" };
