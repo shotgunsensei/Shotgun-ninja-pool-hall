@@ -582,21 +582,39 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
     if (!network) return;
     if (mode === "online-host") {
       // Host receives shot intents from guest. Validate authoritatively
-      // before simulating: ignore stale (out-of-turn) intents, and snap any
-      // guest-supplied cue placement to a legal free spot inside the play
-      // area so a malicious or buggy guest cannot place the cue ball off the
-      // table or overlapping another ball.
+      // before simulating: ignore stale (out-of-turn) intents, reject
+      // malformed numeric values (NaN / Infinity / out-of-range), and snap
+      // any guest-supplied cue placement to a legal free spot inside the
+      // play area so a malicious or buggy guest cannot corrupt the
+      // simulation or place the cue ball off the table.
       const off = network.onRemoteShot((shot) => {
         if (state.currentPlayer === localSeat) return; // ignore stale
-        let validated: Shot = shot;
+        // Schema/number validation
+        if (
+          typeof shot.angle !== "number" ||
+          !Number.isFinite(shot.angle) ||
+          typeof shot.power !== "number" ||
+          !Number.isFinite(shot.power)
+        ) {
+          return;
+        }
+        const angle = shot.angle;
+        const power = Math.min(1, Math.max(0.05, shot.power));
+        let validated: Shot = { angle, power };
         if (shot.cuePlacement) {
-          if (!state.ballInHand) {
-            // Cue placement only allowed when ball-in-hand is in effect.
-            validated = { angle: shot.angle, power: shot.power };
-          } else {
-            const safe = findFreeSpot(state, shot.cuePlacement);
-            validated = { ...shot, cuePlacement: safe };
+          const cp = shot.cuePlacement;
+          const validCp =
+            cp &&
+            typeof cp.x === "number" &&
+            typeof cp.y === "number" &&
+            Number.isFinite(cp.x) &&
+            Number.isFinite(cp.y);
+          if (validCp && state.ballInHand) {
+            // Snap to a legal in-bounds, non-overlapping spot.
+            validated = { angle, power, cuePlacement: findFreeSpot(state, cp) };
           }
+          // If cuePlacement is invalid OR ballInHand is false, drop the
+          // placement and use existing cue position.
         }
         void performShot(validated, true);
       });
