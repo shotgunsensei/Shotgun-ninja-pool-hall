@@ -1,0 +1,19 @@
+{
+  "name": "LAN Pool Lite",
+  "short_name": "Pool Lite",
+  "description": "A clean, no-ads, no-login 8-ball pool game.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b3d2e",
+  "theme_color": "#0b3d2e",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
