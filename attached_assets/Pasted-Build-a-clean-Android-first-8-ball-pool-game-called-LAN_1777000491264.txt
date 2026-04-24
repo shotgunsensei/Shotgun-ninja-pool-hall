@@ -1,0 +1,86 @@
+Build a clean Android-first 8-ball pool game called LAN Pool Lite.
+
+Core goal:
+Create a simple, no-ads, no-login, no-coins billiards game that two players can play either on the same Android device or over the same local Wi-Fi network.
+
+Required game modes:
+1. Local Pass-and-Play:
+   - Two players share one device.
+   - Player 1 and Player 2 take turns.
+   - No internet required.
+
+2. LAN Multiplayer:
+   - One device can Host Game.
+   - Another device can Join Game using local IP address.
+   - Show the host device LAN IP clearly.
+   - Optional: generate a QR code containing the host IP/port.
+   - Keep all traffic local network only.
+   - No account system.
+   - No external servers.
+
+3. Practice Mode:
+   - Single player can play against a basic bot or just practice shots.
+
+Gameplay:
+- Top-down 2D pool table.
+- Standard 8-ball layout.
+- Cue ball, 7 solids, 7 stripes, 8 ball.
+- Drag to aim.
+- Power meter for shot strength.
+- Show aiming guide line.
+- Ball physics with collision, friction, rails, pockets, and stopping detection.
+- Automatically switch turns after shot resolution.
+- Enforce basic 8-ball rules:
+  - Assign solids/stripes after first legal pocketed ball.
+  - Continue turn after pocketing own ball.
+  - Foul if cue ball is pocketed.
+  - 8 ball only legal after clearing assigned group.
+  - Early 8 ball pocket loses.
+  - Legal 8 ball pocket wins.
+
+Networking:
+- Use deterministic turn-based sync where only shot angle, power, spin if added later, and game state are transmitted.
+- Host is authoritative.
+- Client sends shot request.
+- Host validates and broadcasts state.
+- Include reconnect handling for LAN disconnects.
+- Keep multiplayer simple and reliable over local Wi-Fi.
+
+UI:
+- Mobile-first portrait and landscape support.
+- Main menu:
+  - Practice
+  - Local 2 Player
+  - Host LAN Game
+  - Join LAN Game
+  - Settings
+- Settings:
+  - Aim guide on/off
+  - Table speed
+  - Sound on/off
+  - Vibration on/off
+- No ads, no purchases, no analytics required.
+
+Technical:
+- Use Godot 4 if possible.
+- Export-ready Android project.
+- Include clean folder structure.
+- Include README with Android build/export instructions.
+- Include clear comments in code.
+- Include placeholder-free functional implementation.
+- Prioritize reliable gameplay over fancy graphics.
+- Use simple vector/table graphics if needed.
+- Make it playable before making it pretty.
+
+Deliverables:
+- Complete project files.
+- Android export configuration.
+- README.md
+- LAN testing guide:
+  1. Connect both phones to same Wi-Fi.
+  2. Open app on phone A.
+  3. Tap Host LAN Game.
+  4. Open app on phone B.
+  5. Tap Join LAN Game.
+  6. Enter host IP or scan QR.
+  7. Start match.
