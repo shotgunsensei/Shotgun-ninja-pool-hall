@@ -33,5 +33,28 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshot-narrow-game.png",
+      "sizes": "412x915",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Break the rack in Free Shoot practice"
+    },
+    {
+      "src": "screenshot-narrow-menu.png",
+      "sizes": "412x915",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Practice, hot-seat, or take the table online"
+    },
+    {
+      "src": "screenshot-wide-game.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Tactical 8-ball on a full-width table"
+    }
   ]
 }
