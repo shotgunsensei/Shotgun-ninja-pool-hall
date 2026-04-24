@@ -351,10 +351,7 @@ export function simulateShot(
   // Higher table speed -> less friction. tableSpeed=1 -> 0.985 baseline.
   const friction = Math.min(0.999, 1 - (1 - FRICTION) / Math.max(0.4, tableSpeed));
 
-  let cueCushionsBeforeContact = 0;
-
   for (let tick = 0; tick < MAX_TICKS; tick += 1) {
-    const cueWasMoving = cue.vel.x !== 0 || cue.vel.y !== 0;
     const result = stepBalls(balls, friction);
 
     // Track first contact
@@ -371,10 +368,6 @@ export function simulateShot(
       }
     }
 
-    // Track cushion hits
-    if (cueWasMoving && result.cushionHits > 0 && events.firstContact === null) {
-      cueCushionsBeforeContact += result.cushionHits;
-    }
     if (result.cushionHits > 0) {
       events.cueHitCushion = true;
       if (events.firstContact !== null) {
@@ -388,9 +381,6 @@ export function simulateShot(
 
     if (allStopped(balls)) break;
   }
-
-  // Mark unused locals for clarity (lint quiet)
-  void cueCushionsBeforeContact;
 
   const finalState: GameState = {
     ...state,

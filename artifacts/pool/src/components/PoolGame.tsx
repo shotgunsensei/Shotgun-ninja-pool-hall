@@ -23,7 +23,7 @@ import {
   findFreeSpot,
   makeInitialBalls,
 } from "@/lib/physics";
-import { applyShotResult, makeInitialGameState, ballGroup, ballsRemainingForGroup } from "@/lib/rules";
+import { applyShotResult, makeInitialGameState, ballsRemainingForGroup } from "@/lib/rules";
 import { unlockAudio, sfxCue, sfxClack, sfxPocket, sfxWin, sfxLose, vibrate } from "@/lib/audio";
 import { useSettings } from "@/lib/settings";
 import type { GameState, Shot, Vec2 } from "@/lib/types";
@@ -62,7 +62,12 @@ function isStripe(id: number): boolean {
 // Component props
 // =====================================================================
 
-export type GameMode = "practice" | "local" | "online-host" | "online-guest";
+export type GameMode =
+  | "practice"
+  | "freeshoot"
+  | "local"
+  | "online-host"
+  | "online-guest";
 
 export interface PoolGameProps {
   mode: GameMode;
@@ -120,11 +125,16 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
   const myTurn = useMemo(() => {
     if (animating) return false;
     if (state.gameOver) return false;
+    if (mode === "freeshoot") return true; // single player, no turns
     if (mode === "practice") return state.currentPlayer === 0;
     if (mode === "local") return true; // hot-seat — always
     if (localSeat === undefined) return false;
     return state.currentPlayer === localSeat;
   }, [animating, state.currentPlayer, state.gameOver, mode, localSeat]);
+
+  // Pending cue placement (used when guest places the cue ball before shooting,
+  // so the placement can be sent to the host as part of the shot intent).
+  const [pendingCuePlacement, setPendingCuePlacement] = useState<Vec2 | null>(null);
 
   // ----- Canvas sizing & rendering -----
   const sizeRef = useRef<{ scale: number; ox: number; oy: number; w: number; h: number }>({
@@ -384,16 +394,31 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
     if (!w) return;
 
     if (state.ballInHand) {
-      // Place cue ball at the tapped point (snap to a free spot).
+      // Snap to a free spot. For online-guest the placement must travel with
+      // the shot intent so the host (authoritative) can use it. For all other
+      // modes we apply locally so the cue ball moves immediately.
       const placed = findFreeSpot(state, w);
-      setState((prev) => {
-        const balls = prev.balls.map((b) =>
-          b.id === 0
-            ? { ...b, pos: placed, inPocket: false, vel: { x: 0, y: 0 } }
-            : b,
-        );
-        return { ...prev, balls, ballInHand: false };
-      });
+      if (mode === "online-guest") {
+        setPendingCuePlacement(placed);
+        // Show the cue at the chosen spot for visual feedback only.
+        setState((prev) => ({
+          ...prev,
+          balls: prev.balls.map((b) =>
+            b.id === 0
+              ? { ...b, pos: placed, inPocket: false, vel: { x: 0, y: 0 } }
+              : b,
+          ),
+        }));
+      } else {
+        setState((prev) => {
+          const balls = prev.balls.map((b) =>
+            b.id === 0
+              ? { ...b, pos: placed, inPocket: false, vel: { x: 0, y: 0 } }
+              : b,
+          );
+          return { ...prev, balls, ballInHand: false };
+        });
+      }
       vibrate(15, settings.vibration);
       return;
     }
@@ -402,7 +427,9 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
   }
 
   function handlePointerMove(ev: ReactPointerEvent<HTMLCanvasElement>): void {
-    if (!myTurn || animating || state.ballInHand) return;
+    if (!myTurn || animating) return;
+    // While ball-in-hand is unresolved (no placement chosen yet) skip aim move.
+    if (state.ballInHand && !(mode === "online-guest" && pendingCuePlacement)) return;
     if (!aim.active) return;
     if (ev.buttons === 0 && ev.pointerType === "mouse") return;
     const w = pointerToWorld(ev);
@@ -489,7 +516,23 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
       setAnimating(true);
       try {
         const { finalState, events } = await animateShot(state, shot);
-        const resolved = applyShotResult(state, finalState, events);
+        let resolved = applyShotResult(state, finalState, events);
+
+        // Free-shoot mode: ignore rules — keep playing freely as player 0,
+        // never end the game, never give ball-in-hand.
+        if (mode === "freeshoot") {
+          resolved = {
+            ...resolved,
+            state: {
+              ...resolved.state,
+              currentPlayer: 0,
+              ballInHand: false,
+              gameOver: null,
+            },
+            foul: null,
+            turnContinues: true,
+          };
+        }
 
         // Status messaging
         const summary: string[] = [];
@@ -581,7 +624,8 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
   // ----- Shot trigger from UI -----
   const triggerShot = useCallback(() => {
     if (!myTurn || animating) return;
-    if (state.ballInHand) {
+    // Online guest must have placed the cue ball first when ball-in-hand.
+    if (state.ballInHand && !(mode === "online-guest" && pendingCuePlacement)) {
       setStatusMsg("Tap the table to place the cue ball first.");
       return;
     }
@@ -596,16 +640,19 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
     const shot: Shot = {
       angle: Math.atan2(dy, dx),
       power,
+      ...(pendingCuePlacement ? { cuePlacement: pendingCuePlacement } : {}),
     };
     if (mode === "online-guest" && network) {
       network.sendShot(shot);
+      setPendingCuePlacement(null);
       setStatusMsg("Shot sent — waiting for the host to play it back.");
       return;
     }
+    setPendingCuePlacement(null);
     void performShot(shot);
-  }, [aim, power, state, myTurn, animating, performShot, mode, network]);
+  }, [aim, power, state, myTurn, animating, performShot, mode, network, pendingCuePlacement]);
 
-  // ----- Bot move (Practice mode) -----
+  // ----- Bot move (Practice "vs CPU" mode only — never in freeshoot) -----
   const lastBotShotRef = useRef<number>(0);
   useEffect(() => {
     if (mode !== "practice") return;
@@ -700,7 +747,11 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
           variant="default"
           className="h-12 px-6 font-semibold"
           onClick={triggerShot}
-          disabled={!myTurn || animating || state.ballInHand}
+          disabled={
+            !myTurn ||
+            animating ||
+            (state.ballInHand && !(mode === "online-guest" && pendingCuePlacement))
+          }
           data-testid="button-shoot"
         >
           {animating
@@ -727,6 +778,3 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
     </div>
   );
 }
-
-// Silence an unused-import warning while keeping the local API ergonomic.
-void ballGroup;
