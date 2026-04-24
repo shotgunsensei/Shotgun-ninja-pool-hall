@@ -1,13 +1,13 @@
 {
-  "name": "LAN Pool Lite",
-  "short_name": "Pool Lite",
-  "description": "A clean, no-ads, no-login 8-ball pool game.",
+  "name": "Shotgun Ninjas Pool Hall",
+  "short_name": "SN Pool Hall",
+  "description": "Tactical 8-ball. Practice, hot-seat, or take the table online. No ads, no login.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0b3d2e",
-  "theme_color": "#0b3d2e",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
   "icons": [
     {
       "src": "favicon.svg",

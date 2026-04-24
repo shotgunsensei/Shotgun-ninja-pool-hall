@@ -30,7 +30,7 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 
 - **api-server** (`artifacts/api-server`) — Express 5 + WebSocket. Exposes `/api/*` and `/ws/pool` (pool relay).
 - **mockup-sandbox** (`artifacts/mockup-sandbox`) — Vite preview server for design exploration.
-- **pool** (`artifacts/pool`) — **LAN Pool Lite**, a mobile-first 8-ball pool React/Canvas web app (PWA-installable). Modes: Practice (vs basic CPU), Local 2-player (hot-seat), Online Room (host-authoritative WebSocket via api-server's `/ws/pool`).
+- **pool** (`artifacts/pool`) — **Shotgun Ninjas Pool Hall**, a mobile-first 8-ball pool React/Canvas web app (PWA-installable), themed after Shotgun Ninjas Productions (black + crimson, bold uppercase, tactical `SYS::` accents, ninja-headbanded 8-ball logo, deep-wine felt). Modes: Practice (Free shoot or vs basic CPU), Local 2-player (hot-seat), Online Room (host-authoritative WebSocket via api-server's `/ws/pool`).
   - Routes: `/`, `/practice`, `/local`, `/host`, `/join`, `/settings`.
   - Lib: `physics.ts` (deterministic ball sim), `rules.ts` (8-ball rules), `bot.ts` (basic CPU), `network.ts` (WS client), `audio.ts` (procedural SFX), `settings.ts` (localStorage).
   - Game state is host-authoritative for online play: guest sends `shot` intents, host runs simulation + broadcasts `state` snapshots; guest auto-requests state on join for mid-game reconnects.

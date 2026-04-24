@@ -1,6 +1,8 @@
-# LAN Pool Lite
+# Shotgun Ninjas Pool Hall
 
-Mobile-first 8-ball pool web app. Three modes:
+Mobile-first 8-ball pool web app, branded after the Shotgun Ninjas Productions
+"operator" aesthetic — black + crimson, bold uppercase headlines, tactical
+`SYS::` accents. Three modes:
 
 - **Practice** — Free shoot, or play against a basic CPU.
 - **Local 2 player** — Hot-seat on one device, alternating turns.

@@ -25,7 +25,9 @@ export default function SettingsPage(): JSX.Element {
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <h2 className="font-semibold">Settings</h2>
+        <h2 className="font-semibold uppercase tracking-wider text-sm">
+          <span className="text-primary">SYS::CONFIG</span> · Settings
+        </h2>
       </header>
 
       <main className="flex-1 p-4 max-w-md w-full mx-auto flex flex-col gap-3">

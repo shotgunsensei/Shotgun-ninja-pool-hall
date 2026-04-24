@@ -125,7 +125,9 @@ export default function JoinGame(): JSX.Element {
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h2 className="font-semibold">Join a room</h2>
+          <h2 className="font-semibold uppercase tracking-wider text-sm">
+            <span className="text-primary">SYS::JOIN</span> · Room
+          </h2>
           <div className="ml-auto flex items-center gap-1 text-xs">
             {submitted && (status === "joined" || status === "connected") ? (
               <Wifi className="h-3.5 w-3.5 text-emerald-400" />

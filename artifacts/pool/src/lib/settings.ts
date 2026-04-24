@@ -1,12 +1,26 @@
 import { useEffect, useState, useCallback } from "react";
 import { DEFAULT_SETTINGS, type Settings } from "./types";
 
-const KEY = "lan-pool-lite:settings";
+const KEY = "snph:settings";
+const LEGACY_KEY = "lan-pool-lite:settings";
 
 function load(): Settings {
   if (typeof window === "undefined") return { ...DEFAULT_SETTINGS };
   try {
-    const raw = window.localStorage.getItem(KEY);
+    let raw = window.localStorage.getItem(KEY);
+    if (!raw) {
+      // Migrate user's saved settings from the pre-rebrand key.
+      const legacy = window.localStorage.getItem(LEGACY_KEY);
+      if (legacy) {
+        raw = legacy;
+        try {
+          window.localStorage.setItem(KEY, legacy);
+          window.localStorage.removeItem(LEGACY_KEY);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw) as Partial<Settings>;
     return {

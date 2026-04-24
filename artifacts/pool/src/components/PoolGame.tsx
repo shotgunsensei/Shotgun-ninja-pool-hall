@@ -185,11 +185,21 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
     ctx.translate(ox, oy);
     ctx.scale(scale, scale);
 
-    // Cushion frame
-    ctx.fillStyle = "#3a1f12";
+    // Cushion frame — matte black with a thin crimson rim baked into the felt edge below
+    ctx.fillStyle = "#0a0a0a";
     ctx.fillRect(0, 0, TABLE_WIDTH, TABLE_HEIGHT);
 
-    // Felt
+    // Inner crimson rim around the felt
+    ctx.strokeStyle = "#dc2626";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(
+      RAIL - 5,
+      RAIL - 5,
+      TABLE_WIDTH - (RAIL - 5) * 2,
+      TABLE_HEIGHT - (RAIL - 5) * 2,
+    );
+
+    // Felt — deep wine red
     const grad = ctx.createRadialGradient(
       TABLE_WIDTH / 2,
       TABLE_HEIGHT / 2,
@@ -198,12 +208,12 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
       TABLE_HEIGHT / 2,
       TABLE_WIDTH / 1.4,
     );
-    grad.addColorStop(0, "#15663f");
-    grad.addColorStop(1, "#0c4127");
+    grad.addColorStop(0, "#4a1014");
+    grad.addColorStop(1, "#1a0608");
     ctx.fillStyle = grad;
     ctx.fillRect(RAIL - 4, RAIL - 4, TABLE_WIDTH - (RAIL - 4) * 2, TABLE_HEIGHT - (RAIL - 4) * 2);
 
-    // Felt subtle line markers (head string + foot spot)
+    // Felt subtle line markers (head string)
     ctx.strokeStyle = "rgba(255,255,255,0.06)";
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -214,11 +224,11 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
 
     // Pockets
     for (const p of POCKETS) {
-      ctx.fillStyle = "#06120c";
+      ctx.fillStyle = "#050505";
       ctx.beginPath();
       ctx.arc(p.x, p.y, POCKET_RADIUS, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = "rgba(0,0,0,0.6)";
+      ctx.strokeStyle = "rgba(220,38,38,0.45)";
       ctx.lineWidth = 2;
       ctx.stroke();
     }
@@ -248,7 +258,7 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
       if (lenA > 1) {
         const dir = { x: dx / lenA, y: dy / lenA };
         const end = predictAimLine(state, cuePos, dir);
-        ctx.strokeStyle = "rgba(255,232,150,0.8)";
+        ctx.strokeStyle = "rgba(255,255,255,0.85)";
         ctx.lineWidth = 2;
         ctx.setLineDash([8, 6]);
         ctx.beginPath();
@@ -256,10 +266,10 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
         ctx.lineTo(end.x, end.y);
         ctx.stroke();
         ctx.setLineDash([]);
-        // ghost ball at end
+        // ghost ball at end — crimson outline on-brand
         ctx.beginPath();
         ctx.arc(end.x, end.y, BALL_RADIUS, 0, Math.PI * 2);
-        ctx.strokeStyle = "rgba(255,232,150,0.6)";
+        ctx.strokeStyle = "rgba(220,38,38,0.85)";
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
@@ -302,10 +312,10 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
 
     // Ball-in-hand indicator
     if (state.ballInHand && myTurn && !animating) {
-      ctx.fillStyle = "rgba(255,232,150,0.85)";
-      ctx.font = "600 18px Inter, sans-serif";
+      ctx.fillStyle = "rgba(220,38,38,0.95)";
+      ctx.font = "700 18px Inter, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText("Ball in hand — tap to place cue", TABLE_WIDTH / 2, 22);
+      ctx.fillText("BALL IN HAND — TAP TO PLACE CUE", TABLE_WIDTH / 2, 22);
     }
 
     ctx.restore();

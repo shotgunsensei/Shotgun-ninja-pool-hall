@@ -12,7 +12,12 @@ export default function Practice(): JSX.Element {
   if (chosen === null) {
     return (
       <div className="h-[100dvh] w-full flex flex-col items-center justify-center gap-6 p-6 bg-background text-foreground">
-        <h1 className="text-2xl font-semibold">Practice</h1>
+        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm border border-primary/40 bg-primary/10 text-primary font-mono text-[10px] tracking-[0.25em] uppercase">
+          SYS::PRACTICE
+        </div>
+        <h1 className="text-3xl font-black tracking-tight uppercase">
+          Drill <span className="text-primary">Mode</span>
+        </h1>
         <p className="text-sm text-muted-foreground text-center max-w-sm">
           Free shoot lets you take any shot you like — no turns, no rules. Vs CPU plays a full
           8-ball game against a basic bot.

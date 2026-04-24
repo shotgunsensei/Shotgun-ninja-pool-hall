@@ -92,7 +92,7 @@ export default function HostGame(): JSX.Element {
     void QRCode.toDataURL(joinUrl, {
       margin: 1,
       width: 220,
-      color: { dark: "#0a3326", light: "#f5f3ee" },
+      color: { dark: "#0a0a0a", light: "#fafafa" },
     }).then((url) => setQrDataUrl(url));
   }, [joinUrl]);
 
@@ -139,7 +139,9 @@ export default function HostGame(): JSX.Element {
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h2 className="font-semibold">Hosting a room</h2>
+          <h2 className="font-semibold uppercase tracking-wider text-sm">
+            <span className="text-primary">SYS::HOST</span> · Room
+          </h2>
           <div className="ml-auto flex items-center gap-1 text-xs">
             {status === "joined" || status === "connected" ? (
               <Wifi className="h-3.5 w-3.5 text-emerald-400" />
@@ -159,7 +161,7 @@ export default function HostGame(): JSX.Element {
                 </div>
               ) : (
                 <>
-                  <div className="text-xs uppercase tracking-wider text-muted-foreground">
+                  <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground font-mono">
                     Share this code
                   </div>
                   <div

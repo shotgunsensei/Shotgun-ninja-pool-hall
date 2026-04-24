@@ -76,44 +76,45 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  --background: 158 40% 8%;        /* deep felt green-black */
-  --foreground: 40 30% 96%;        /* warm cream text */
-  --border: 158 30% 18%;
-  --card: 158 35% 12%;
-  --card-foreground: 40 30% 96%;
-  --card-border: 158 30% 22%;
+  /* Shotgun Ninjas Pool Hall — black + crimson tactical palette */
+  --background: 0 0% 5%;           /* near-black */
+  --foreground: 0 0% 96%;          /* near-white */
+  --border: 0 0% 16%;
+  --card: 0 0% 8%;
+  --card-foreground: 0 0% 96%;
+  --card-border: 0 60% 20%;        /* subtle crimson rim on cards */
 
-  --sidebar: 158 35% 12%;
-  --sidebar-foreground: 40 30% 96%;
-  --sidebar-border: 158 30% 22%;
-  --sidebar-primary: 40 80% 60%;
-  --sidebar-primary-foreground: 158 40% 8%;
-  --sidebar-accent: 158 30% 18%;
-  --sidebar-accent-foreground: 40 30% 96%;
-  --sidebar-ring: 40 80% 60%;
+  --sidebar: 0 0% 7%;
+  --sidebar-foreground: 0 0% 96%;
+  --sidebar-border: 0 60% 20%;
+  --sidebar-primary: 0 72% 51%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 0 0% 14%;
+  --sidebar-accent-foreground: 0 0% 96%;
+  --sidebar-ring: 0 72% 51%;
 
-  --popover: 158 35% 12%;
-  --popover-foreground: 40 30% 96%;
-  --popover-border: 158 30% 22%;
+  --popover: 0 0% 8%;
+  --popover-foreground: 0 0% 96%;
+  --popover-border: 0 60% 20%;
 
-  --primary: 40 90% 58%;           /* cue-tip yellow */
-  --primary-foreground: 158 40% 8%;
-  --secondary: 158 30% 18%;
-  --secondary-foreground: 40 30% 96%;
-  --muted: 158 25% 16%;
-  --muted-foreground: 40 15% 70%;
-  --accent: 158 30% 22%;
-  --accent-foreground: 40 30% 96%;
-  --destructive: 0 70% 55%;
+  --primary: 0 72% 51%;            /* shotgun-ninjas crimson */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 14%;
+  --secondary-foreground: 0 0% 96%;
+  --muted: 0 0% 12%;
+  --muted-foreground: 0 0% 64%;
+  --accent: 0 72% 18%;             /* deep wine accent */
+  --accent-foreground: 0 0% 96%;
+  --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
 
-  --input: 158 30% 22%;
-  --ring: 40 80% 60%;
-  --chart-1: 40 80% 60%;
-  --chart-2: 200 70% 55%;
-  --chart-3: 0 70% 55%;
-  --chart-4: 280 60% 60%;
-  --chart-5: 120 50% 55%;
+  --input: 0 0% 14%;
+  --ring: 0 72% 51%;
+  --chart-1: 0 72% 51%;
+  --chart-2: 0 0% 80%;
+  --chart-3: 0 60% 35%;
+  --chart-4: 30 80% 55%;
+  --chart-5: 200 70% 55%;
 
   --app-font-sans: 'Inter', sans-serif;
   --app-font-serif: Georgia, serif;
@@ -150,7 +151,9 @@
   * { @apply border-border; }
   body {
     @apply font-sans antialiased bg-background text-foreground;
-    background-image: radial-gradient(ellipse at center, hsl(158 40% 12%) 0%, hsl(158 45% 6%) 100%);
+    background-image:
+      radial-gradient(ellipse at top, hsl(0 60% 14% / 0.55) 0%, transparent 55%),
+      radial-gradient(ellipse at center, hsl(0 0% 7%) 0%, hsl(0 0% 3%) 100%);
     min-height: 100vh;
     min-height: 100dvh;
   }
