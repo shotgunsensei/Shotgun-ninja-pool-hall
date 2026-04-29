@@ -26,6 +26,9 @@ export default function HostGame(): JSX.Element {
   // Listeners for in-game forwarding
   const shotListeners = useRef<Set<(shot: Shot) => void>>(new Set());
   const stateListeners = useRef<Set<(state: GameState) => void>>(new Set());
+  const choiceListeners = useRef<Set<(action: "accept" | "rerack") => void>>(
+    new Set(),
+  );
   // Cache the latest authoritative state so we can resend on reconnect or
   // when the guest explicitly asks for it (handles mid-game rejoin).
   const latestStateRef = useRef<GameState | null>(null);
@@ -58,7 +61,11 @@ export default function HostGame(): JSX.Element {
         } else if (msg.type === "error") {
           setErrorMsg(msg.error);
         } else if (msg.type === "relay") {
-          const payload = msg.payload as { kind?: string; shot?: Shot };
+          const payload = msg.payload as {
+            kind?: string;
+            shot?: Shot;
+            action?: "accept" | "rerack";
+          };
           if (payload?.kind === "shot" && payload.shot) {
             for (const l of shotListeners.current) l(payload.shot);
           } else if (payload?.kind === "stateRequest") {
@@ -66,6 +73,11 @@ export default function HostGame(): JSX.Element {
             if (latestStateRef.current) {
               netRef.current?.send({ kind: "state", state: latestStateRef.current });
             }
+          } else if (
+            payload?.kind === "choice" &&
+            (payload.action === "accept" || payload.action === "rerack")
+          ) {
+            for (const l of choiceListeners.current) l(payload.action);
           }
         }
       },
@@ -115,6 +127,10 @@ export default function HostGame(): JSX.Element {
       onRemoteState: (cb: (state: GameState) => void) => {
         stateListeners.current.add(cb);
         return () => stateListeners.current.delete(cb);
+      },
+      onRemoteChoice: (cb: (action: "accept" | "rerack") => void) => {
+        choiceListeners.current.add(cb);
+        return () => choiceListeners.current.delete(cb);
       },
     }),
     [sendState],

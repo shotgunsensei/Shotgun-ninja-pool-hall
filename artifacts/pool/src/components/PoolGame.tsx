@@ -96,6 +96,12 @@ export interface PoolGameProps {
     onRemoteShot: (cb: (shot: Shot) => void) => () => void;
     sendState?: (state: GameState) => void;
     onRemoteState?: (cb: (state: GameState) => void) => () => void;
+    /** Guest-only: ask the host to resolve a pending 8-on-break or
+     *  failed-break choice on the guest's behalf. The host is still
+     *  authoritative; this just carries the chooser's intent across. */
+    sendChoice?: (action: "accept" | "rerack") => void;
+    /** Host-only: subscribe to choice messages forwarded by the guest. */
+    onRemoteChoice?: (cb: (action: "accept" | "rerack") => void) => () => void;
   };
   onExit?: () => void;
 }
@@ -951,6 +957,29 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
   useEffect(() => {
     if (!network) return;
     if (mode === "online-host") {
+      // Listen for the guest's choice on a pending 8-on-break / failed
+      // break decision and apply it authoritatively. We re-validate
+      // against the latest state inside the setState callback so a stale
+      // or duplicate message can't double-apply.
+      let offChoice: (() => void) | undefined;
+      if (network.onRemoteChoice) {
+        offChoice = network.onRemoteChoice((action) => {
+          if (action !== "accept" && action !== "rerack") return;
+          setState((prev) => {
+            if (!prev.pendingChoice) return prev;
+            // Only honor the message when the guest is actually the
+            // chooser; otherwise the host's own overlay is in charge.
+            if (prev.pendingChoice.chooser !== 1) return prev;
+            const next =
+              action === "accept"
+                ? acceptTable(prev)
+                : rerackAndBreak(prev, makeInitialBalls());
+            if (network.sendState) network.sendState(next);
+            return next;
+          });
+          if (action === "rerack") setStatusMsg("Re-racked. Break time!");
+        });
+      }
       const off = network.onRemoteShot((shot) => {
         if (state.currentPlayer === localSeat) return; // ignore stale
         // Drop any incoming shot while a player decision is pending —
@@ -1002,7 +1031,10 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
         }
         void performShot(validated, true);
       });
-      return off;
+      return () => {
+        off();
+        offChoice?.();
+      };
     }
     if (mode === "online-guest") {
       if (!network.onRemoteState) return;
@@ -1123,26 +1155,59 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
     return () => clearTimeout(t);
   }, [state.pendingChoice, mode]);
 
-  // For online play, the host is authoritative for resolving any
-  // pending choice (8-on-break / failed-break) regardless of which
-  // seat the chooser is, then broadcasts the resulting state. This
-  // avoids needing a separate guest->host choice channel and prevents
-  // a deadlock where neither side can act when the chooser is the
-  // guest. For local / practice modes the active player on this
-  // device makes the call directly.
-  const choiceMine =
-    state.pendingChoice !== null && state.pendingChoice !== undefined &&
-    (mode === "local" || mode === "practice" || mode === "online-host");
+  // The chooser of an 8-on-break / failed-break decision is whoever
+  // didn't break (carried in pendingChoice.chooser). For online play
+  // each side resolves on their own device when they are the chooser:
+  // the guest's click is sent to the host as a "choice" message, the
+  // host applies it authoritatively and broadcasts the new state. For
+  // hot-seat / practice the active player on this device makes the
+  // call directly.
+  const myChoice = !!state.pendingChoice && (() => {
+    if (mode === "freeshoot") return false;
+    if (mode === "local" || mode === "practice") return true;
+    if (localSeat === undefined) return false;
+    return state.pendingChoice!.chooser === localSeat;
+  })();
+
+  // Tracks "I clicked accept/rerack as the guest and am awaiting the
+  // host's authoritative state echo". Reset whenever pendingChoice
+  // changes (resolves, or a new choice appears). Also auto-resets after
+  // a short timeout so a dropped message during a flaky connection
+  // doesn't leave the chooser stuck on a "Sending…" indicator forever
+  // — they get the overlay back and can click again.
+  const [sendingChoice, setSendingChoice] = useState(false);
+  useEffect(() => {
+    setSendingChoice(false);
+  }, [state.pendingChoice]);
+  useEffect(() => {
+    if (!sendingChoice) return;
+    const t = window.setTimeout(() => setSendingChoice(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [sendingChoice]);
 
   function chooseAccept(): void {
+    if (mode === "online-guest" && network?.sendChoice) {
+      network.sendChoice("accept");
+      setSendingChoice(true);
+      setStatusMsg("Choice sent — waiting for the host to apply it…");
+      return;
+    }
     setState((prev) => {
+      if (!prev.pendingChoice) return prev;
       const next = acceptTable(prev);
       if (mode === "online-host" && network?.sendState) network.sendState(next);
       return next;
     });
   }
   function chooseRerack(): void {
+    if (mode === "online-guest" && network?.sendChoice) {
+      network.sendChoice("rerack");
+      setSendingChoice(true);
+      setStatusMsg("Choice sent — waiting for the host to apply it…");
+      return;
+    }
     setState((prev) => {
+      if (!prev.pendingChoice) return prev;
       const next = rerackAndBreak(prev, makeInitialBalls());
       if (mode === "online-host" && network?.sendState) network.sendState(next);
       return next;
@@ -1203,17 +1268,22 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
         />
-        {state.pendingChoice && choiceMine && (
+        {state.pendingChoice && myChoice && !sendingChoice && (
           <PendingChoiceOverlay
             choice={state.pendingChoice}
             onAccept={chooseAccept}
             onRerack={chooseRerack}
           />
         )}
-        {state.pendingChoice && !choiceMine && (
+        {state.pendingChoice && (!myChoice || sendingChoice) && (
           <div className="absolute inset-x-0 top-2 flex justify-center pointer-events-none">
-            <div className="px-3 py-1.5 rounded-md bg-card/85 border border-card-border text-xs">
-              Waiting for opponent's choice…
+            <div
+              className="px-3 py-1.5 rounded-md bg-card/85 border border-card-border text-xs"
+              data-testid="banner-waiting-choice"
+            >
+              {sendingChoice
+                ? "Sending your choice…"
+                : "Waiting for opponent's choice…"}
             </div>
           </div>
         )}

@@ -107,6 +107,9 @@ export default function JoinGame(): JSX.Element {
         stateListeners.current.add(cb);
         return () => stateListeners.current.delete(cb);
       },
+      sendChoice: (action: "accept" | "rerack") => {
+        netRef.current?.send({ kind: "choice", action });
+      },
     }),
     [],
   );
