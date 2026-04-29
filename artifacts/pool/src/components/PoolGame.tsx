@@ -1122,14 +1122,16 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
     return () => clearTimeout(t);
   }, [state.pendingChoice, mode]);
 
-  // For online play, the host owns pending-choice resolution and
-  // broadcasts the new state. We surface the buttons only on the host
-  // side and also locally in local/practice modes.
+  // For online play, the host is authoritative for resolving any
+  // pending choice (8-on-break / failed-break) regardless of which
+  // seat the chooser is, then broadcasts the resulting state. This
+  // avoids needing a separate guest->host choice channel and prevents
+  // a deadlock where neither side can act when the chooser is the
+  // guest. For local / practice modes the active player on this
+  // device makes the call directly.
   const choiceMine =
     state.pendingChoice !== null && state.pendingChoice !== undefined &&
-    (mode === "local" ||
-      mode === "practice" ||
-      (mode === "online-host" && state.pendingChoice.chooser === localSeat));
+    (mode === "local" || mode === "practice" || mode === "online-host");
 
   function chooseAccept(): void {
     setState((prev) => {
