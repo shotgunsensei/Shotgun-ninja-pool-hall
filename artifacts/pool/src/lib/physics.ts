@@ -105,15 +105,44 @@ const RESTITUTION_BALL = 0.95;
  *  (see {@link railRestitution}) so soft rolls bounce livelier than slams. */
 export const RESTITUTION_RAIL = 0.78;
 
-/** Velocity decay per tick once the ball is in the rolling phase. */
-const ROLL_FRICTION = 0.9925;
-/** Per-tick deceleration applied to the contact-patch slip vector during
- *  the sliding phase (which is also subtracted from linear velocity).
- *  Tuned so a hard break feels fast off the cue ball but settles into
- *  rolling within ~25 ticks. */
-const SLIDE_DECEL_PER_TICK = 0.32;
+/** Velocity decay per tick once the ball is in the rolling phase.
+ *  Bumped slightly versus the original feel-tuned value so that long,
+ *  low-power shots don't coast forever now that the slide-to-roll
+ *  transition (see {@link SLIDE_LINEAR_SHARE}) leaves the cue with the
+ *  full physical 5/7·v₀ instead of the ~0.63·v₀ produced by the old
+ *  asymmetric impulse split. */
+const ROLL_FRICTION = 0.991;
+/** Per-tick reduction of the contact-patch slip magnitude during the
+ *  sliding phase. The slip impulse is shared between linear deceleration
+ *  ({@link SLIDE_LINEAR_SHARE}) and spin acceleration
+ *  ({@link SLIDE_SPIN_SHARE}); together they sum to 1, so this constant
+ *  is exactly how fast `|vel - spin|` shrinks per tick. Tuned so a hard
+ *  break still settles into rolling within ~20 ticks. */
+const SLIDE_DECEL_PER_TICK = 0.45;
 /** Slip magnitude below which the ball is treated as fully rolling. */
 const ROLL_SNAP_SLIP = 0.05;
+
+// --- Slide-to-roll friction split (uniform sphere, I = 2/5·m·r²) ------
+// Kinetic friction at the contact patch produces a force F = µ·m·g
+// acting opposite to the slip vector. For a uniform sphere this gives:
+//   d|vel|/dt   = -µg                   (linear deceleration)
+//   d|spin|/dt  = +µg · (m·r²)/I = +(5/2)·µg   (spin = ω·r catches up)
+//   d|slip|/dt  = -(7/2)·µg
+// So per unit of slip reduction, the impulse splits 2/7 into linear loss
+// and 5/7 into spin gain. A "stun" cue (spin₀ = 0) therefore settles to
+// |vel| = (1 − 2/7)·v₀ = 5/7·v₀ — the canonical slide-to-roll result.
+const SLIDE_LINEAR_SHARE = 2 / 7;
+const SLIDE_SPIN_SHARE = 5 / 7;
+
+// --- Side-spin (English) decay ---------------------------------------
+// Sidespin is mostly preserved on the cloth and bleeds off at rails and
+// on object-ball contact. The per-tick decay used to be 0.985, which let
+// stun shots with English carry too much sidespin into the first contact
+// (e.g. ~22% remaining after 100 ticks). Tightened to 0.98, which is
+// closer to what real footage shows for short-distance finesse shots.
+const SIDESPIN_DECAY_PER_TICK = 0.98;
+/** Multiplicative loss of sidespin on each rail bounce. */
+const SIDESPIN_RAIL_RETENTION = 0.65;
 
 const MIN_SPEED = 0.05; // below this, snap to zero
 export const MAX_LAUNCH_SPEED = 38; // logical units / tick at full power
@@ -511,7 +540,7 @@ function collideBallWithSegment(b: SimBall, s: Segment): { hit: boolean; speed: 
   b.spin.y -= (1 + e) * sn * ny;
 
   // Side spin loses some magnitude on each rail bounce.
-  b.sideSpin *= 0.72;
+  b.sideSpin *= SIDESPIN_RAIL_RETENTION;
 
   return { hit: true, speed };
 }
@@ -649,20 +678,19 @@ function applyFrictionAndSpin(balls: SimBall[], rollFriction: number, slideDecel
       // Sliding phase. Kinetic friction:
       //   - decelerates linear vel in the slip direction
       //   - simultaneously accelerates spin toward vel (reduces slip)
-      // The contact friction force is the same magnitude on both —
-      // the ball loses some forward motion AND its rolling velocity
-      // catches up.
+      // The two impulses share a single friction force, but for a
+      // uniform sphere (I = 2/5·m·r²) the spin-acceleration share is
+      // 5/2× the linear-deceleration share — see the SLIDE_LINEAR_SHARE
+      // / SLIDE_SPIN_SHARE comment block above. With this split, a
+      // stunned cue (spin₀ = 0) settles to |vel| = 5/7·v₀, which is the
+      // textbook result for slide-to-roll on a frictional surface.
       const dec = Math.min(sMag, slideDecel);
       const ux = sx / sMag;
       const uy = sy / sMag;
-      // Half the impulse goes to slowing linear vel, half to speeding spin.
-      // (In a true rigid-body model with I=2/5 m r² these are linked, but
-      // splitting evenly captures the right qualitative behaviour for the
-      // top-down view.)
-      b.vel.x -= ux * dec * 0.5;
-      b.vel.y -= uy * dec * 0.5;
-      b.spin.x += ux * dec * 0.85;
-      b.spin.y += uy * dec * 0.85;
+      b.vel.x -= ux * dec * SLIDE_LINEAR_SHARE;
+      b.vel.y -= uy * dec * SLIDE_LINEAR_SHARE;
+      b.spin.x += ux * dec * SLIDE_SPIN_SHARE;
+      b.spin.y += uy * dec * SLIDE_SPIN_SHARE;
     } else {
       // Rolling: snap spin to vel and apply rolling friction to both.
       b.vel.x *= rollFriction;
@@ -672,7 +700,7 @@ function applyFrictionAndSpin(balls: SimBall[], rollFriction: number, slideDecel
     }
 
     // Side spin decays.
-    b.sideSpin *= 0.985;
+    b.sideSpin *= SIDESPIN_DECAY_PER_TICK;
     if (Math.abs(b.sideSpin) < 0.005) b.sideSpin = 0;
 
     if (Math.abs(b.vel.x) < MIN_SPEED) b.vel.x = 0;
