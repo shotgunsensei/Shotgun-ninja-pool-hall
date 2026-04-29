@@ -28,6 +28,8 @@ function load(): Settings {
       tableSpeed: typeof parsed.tableSpeed === "number" ? parsed.tableSpeed : DEFAULT_SETTINGS.tableSpeed,
       sound: typeof parsed.sound === "boolean" ? parsed.sound : DEFAULT_SETTINGS.sound,
       vibration: typeof parsed.vibration === "boolean" ? parsed.vibration : DEFAULT_SETTINGS.vibration,
+      callShotOn8: typeof parsed.callShotOn8 === "boolean" ? parsed.callShotOn8 : DEFAULT_SETTINGS.callShotOn8,
+      threeFoulRule: typeof parsed.threeFoulRule === "boolean" ? parsed.threeFoulRule : DEFAULT_SETTINGS.threeFoulRule,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

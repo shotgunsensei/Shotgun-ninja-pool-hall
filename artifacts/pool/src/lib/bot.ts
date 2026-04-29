@@ -26,6 +26,9 @@ interface Candidate {
 }
 
 export function chooseBotShot(state: GameState): Shot {
+  // The new physics layer accepts an optional `tipOffset` for spin. The bot
+  // always plays center-strike (stun) shots — leaving tipOffset off keeps
+  // the simulation in its backwards-compatible "no spin" mode.
   const cue = state.balls.find((b) => b.id === 0)!;
   const targets = state.balls.filter((b) => {
     if (b.inPocket) return false;

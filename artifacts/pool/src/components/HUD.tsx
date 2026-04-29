@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { ArrowLeft, Circle, Disc, Target } from "lucide-react";
+import { ArrowLeft, Circle, Disc, Target, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -13,6 +13,8 @@ interface HUDProps {
   mode: GameMode;
   localSeat?: 0 | 1;
   ballsLeft: { solids: number; stripes: number };
+  /** Show consecutive-foul warnings when the 3-foul rule is enabled. */
+  threeFoulRule?: boolean;
   onExit?: () => void;
 }
 
@@ -22,8 +24,9 @@ function PlayerCard(props: {
   active: boolean;
   isMe: boolean;
   count?: number;
+  fouls?: number;
 }): JSX.Element {
-  const { name, group, active, isMe, count } = props;
+  const { name, group, active, isMe, count, fouls } = props;
   return (
     <div
       className={cn(
@@ -44,6 +47,16 @@ function PlayerCard(props: {
         {active && (
           <Target className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
         )}
+        {fouls !== undefined && fouls > 0 && (
+          <Badge
+            variant="destructive"
+            className="ml-auto text-[10px] px-1 py-0 flex items-center gap-1"
+            title={`${fouls} consecutive foul${fouls === 1 ? "" : "s"} — three in a row loses`}
+          >
+            <AlertTriangle className="h-2.5 w-2.5" />
+            {fouls}/3
+          </Badge>
+        )}
       </div>
       <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
         {group === "solids" && (
@@ -58,7 +71,7 @@ function PlayerCard(props: {
             <span>Stripes</span>
           </>
         )}
-        {group === null && <span>Open</span>}
+        {group === null && <span>Open table</span>}
         {typeof count === "number" && (
           <span className="ml-auto font-mono text-foreground">{count} left</span>
         )}
@@ -68,13 +81,15 @@ function PlayerCard(props: {
 }
 
 export default function HUD(props: HUDProps): JSX.Element {
-  const { state, statusMsg, myTurn, mode, localSeat, ballsLeft, onExit } = props;
+  const { state, statusMsg, myTurn, mode, localSeat, ballsLeft, threeFoulRule, onExit } = props;
 
   const p0Active = state.currentPlayer === 0 && !state.gameOver;
   const p1Active = state.currentPlayer === 1 && !state.gameOver;
 
   const isMe0 = mode === "local" || mode === "practice" ? false : localSeat === 0;
   const isMe1 = mode === "local" ? false : mode === "practice" ? false : localSeat === 1;
+
+  const fouls = threeFoulRule ? state.consecutiveFouls : undefined;
 
   return (
     <div className="flex flex-col gap-2 px-3 pt-3 pb-2 bg-card/70 backdrop-blur border-b border-card-border">
@@ -111,6 +126,7 @@ export default function HUD(props: HUDProps): JSX.Element {
           active={p0Active}
           isMe={isMe0}
           count={state.players[0].group === "solids" ? ballsLeft.solids : state.players[0].group === "stripes" ? ballsLeft.stripes : undefined}
+          fouls={fouls?.[0]}
         />
         <PlayerCard
           name={state.players[1].name}
@@ -118,6 +134,7 @@ export default function HUD(props: HUDProps): JSX.Element {
           active={p1Active}
           isMe={isMe1}
           count={state.players[1].group === "solids" ? ballsLeft.solids : state.players[1].group === "stripes" ? ballsLeft.stripes : undefined}
+          fouls={fouls?.[1]}
         />
       </div>
     </div>
