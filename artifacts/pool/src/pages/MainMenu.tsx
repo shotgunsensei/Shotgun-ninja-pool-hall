@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Bot, Users, Wifi, Settings as SettingsIcon } from "lucide-react";
+import { InstallBanner } from "@/components/InstallPrompt";
 
 interface MenuItem {
   to: string;
@@ -129,6 +130,7 @@ export default function MainMenu(): JSX.Element {
       </header>
 
       <main className="flex-1 px-4 pb-6 max-w-md w-full mx-auto flex flex-col gap-3">
+        <InstallBanner />
         {ITEMS.map((item) => (
           <Link key={item.to} href={item.to}>
             <Card

@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { useSettings } from "@/lib/settings";
+import { InstallSettingsRow } from "@/components/InstallPrompt";
 
 export default function SettingsPage(): JSX.Element {
   const [, navigate] = useLocation();
@@ -96,6 +97,8 @@ export default function SettingsPage(): JSX.Element {
             />
           </CardContent>
         </Card>
+
+        <InstallSettingsRow />
       </main>
     </div>
   );
