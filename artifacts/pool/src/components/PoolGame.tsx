@@ -932,11 +932,12 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
         setState(resolved.state);
         setAim((prev) => ({ ...prev, active: false }));
 
-        if (
-          mode === "online-host" &&
-          network?.sendState &&
-          !fromRemote
-        ) {
+        // Host always broadcasts the post-shot authoritative state,
+        // including for shots that originated from the guest. Without
+        // this, a guest's own shot would update the host's view but
+        // the guest would stay stuck on its pre-shot state. There is
+        // no echo risk: sendState is host->guest only.
+        if (mode === "online-host" && network?.sendState) {
           network.sendState(resolved.state);
         }
       } finally {
