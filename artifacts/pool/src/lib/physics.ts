@@ -64,6 +64,10 @@ export const HEAD_SPOT: Vec2 = {
   y: TABLE_HEIGHT / 2,
 };
 
+/** Visual / aim centers of the six pockets. Used by the renderer,
+ *  the bot's pot-target picker, the called-pocket UI and the rules
+ *  engine. NOT used directly for capture — see
+ *  {@link POCKET_CAPTURE_CENTERS} below. */
 export const POCKETS: Vec2[] = [
   { x: PLAY_LEFT, y: PLAY_TOP },
   { x: TABLE_WIDTH / 2, y: PLAY_TOP - 6 },
@@ -71,6 +75,28 @@ export const POCKETS: Vec2[] = [
   { x: PLAY_LEFT, y: PLAY_BOTTOM },
   { x: TABLE_WIDTH / 2, y: PLAY_BOTTOM + 6 },
   { x: PLAY_RIGHT, y: PLAY_BOTTOM },
+];
+
+/** Throat-gated capture centers — used ONLY by the simulation when
+ *  deciding whether a ball has fallen into a pocket. For the four
+ *  corner pockets we shift the capture circle BEHIND the rail by
+ *  ~half a jaw-back, so that a ball center sitting tight against
+ *  both rails near a corner (which is geometrically reachable for a
+ *  ball-in-hand placement, but is NOT in the pocket throat) is no
+ *  longer auto-captured. The radial check, combined with running
+ *  cushion / jaw collisions BEFORE the capture check, is what now
+ *  delivers throat-gated pocketing: balls that catch a jaw on the
+ *  way in will rattle or kick out instead of being silently sunk.
+ *  Side pockets already sit OUTSIDE the rail line so no shift is
+ *  applied. */
+const CORNER_CAPTURE_OFFSET = JAW_BACK * 0.5;
+export const POCKET_CAPTURE_CENTERS: Vec2[] = [
+  { x: PLAY_LEFT - CORNER_CAPTURE_OFFSET, y: PLAY_TOP - CORNER_CAPTURE_OFFSET },
+  { x: TABLE_WIDTH / 2, y: PLAY_TOP - 6 },
+  { x: PLAY_RIGHT + CORNER_CAPTURE_OFFSET, y: PLAY_TOP - CORNER_CAPTURE_OFFSET },
+  { x: PLAY_LEFT - CORNER_CAPTURE_OFFSET, y: PLAY_BOTTOM + CORNER_CAPTURE_OFFSET },
+  { x: TABLE_WIDTH / 2, y: PLAY_BOTTOM + 6 },
+  { x: PLAY_RIGHT + CORNER_CAPTURE_OFFSET, y: PLAY_BOTTOM + CORNER_CAPTURE_OFFSET },
 ];
 
 // ----- Physics tunables -------------------------------------------------
@@ -415,9 +441,17 @@ interface StepResult {
   pocketed: number[];
 }
 
+/** Throat-gated pocket capture. Returns the *visual* pocket center
+ *  (for snap-to-pocket animation) when the ball center has crossed
+ *  into the gated capture region of one of the six pockets. The
+ *  gate is the per-pocket capture circle in {@link POCKET_CAPTURE_CENTERS}
+ *  — see the comment there for why corner pockets are shifted
+ *  behind the rail. */
 function pocketCenterContaining(p: Vec2): Vec2 | null {
-  for (const k of POCKETS) {
-    if (distSq(p, k) < POCKET_CAPTURE_RADIUS * POCKET_CAPTURE_RADIUS) return k;
+  const r2 = POCKET_CAPTURE_RADIUS * POCKET_CAPTURE_RADIUS;
+  for (let i = 0; i < POCKET_CAPTURE_CENTERS.length; i += 1) {
+    const gate = POCKET_CAPTURE_CENTERS[i]!;
+    if (distSq(p, gate) < r2) return POCKETS[i]!;
   }
   return null;
 }
@@ -494,8 +528,23 @@ function stepSubstep(
     b.pos.y += b.vel.y * sdt;
   }
 
-  // Pocket capture (check before cushion bounce so balls falling into a
-  // corner pocket don't ping off the rail first)
+  // Cushion segment collisions FIRST. By resolving angled-jaw and
+  // straight-rail bounces before checking the pocket gate, balls that
+  // catch a jaw on the way in get a real rattle and can be kicked back
+  // out — instead of being silently captured the moment their center
+  // entered the radial gate. Combined with the throat-shifted capture
+  // centers in POCKET_CAPTURE_CENTERS, this is what gives the new
+  // jaw geometry its actual gameplay effect.
+  for (const b of balls) {
+    if (b.inPocket) continue;
+    for (const s of CUSHIONS) {
+      const r = collideBallWithSegment(b, s);
+      if (r.hit) result.cushionHits.push({ id: b.id, speed: r.speed });
+    }
+  }
+
+  // Pocket capture — only fires for balls that actually crossed the
+  // throat gate. See pocketCenterContaining + POCKET_CAPTURE_CENTERS.
   for (const b of balls) {
     if (b.inPocket) continue;
     const pc = pocketCenterContaining(b.pos);
@@ -506,19 +555,10 @@ function stepSubstep(
       b.spin.x = 0;
       b.spin.y = 0;
       b.sideSpin = 0;
-      // Snap into the pocket center so it visually "drops in".
+      // Snap to the visual pocket center so the drop-in looks right.
       b.pos.x = pc.x;
       b.pos.y = pc.y;
       result.pocketed.push(b.id);
-    }
-  }
-
-  // Cushion segment collisions
-  for (const b of balls) {
-    if (b.inPocket) continue;
-    for (const s of CUSHIONS) {
-      const r = collideBallWithSegment(b, s);
-      if (r.hit) result.cushionHits.push({ id: b.id, speed: r.speed });
     }
   }
 
