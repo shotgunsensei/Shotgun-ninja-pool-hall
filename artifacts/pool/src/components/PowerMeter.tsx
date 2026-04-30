@@ -1,6 +1,5 @@
 import type { JSX } from "react";
 import { Slider } from "@/components/ui/slider";
-import { Zap } from "lucide-react";
 
 interface PowerMeterProps {
   value: number; // 0..1
@@ -12,11 +11,7 @@ export default function PowerMeter(props: PowerMeterProps): JSX.Element {
   const { value, onChange, disabled } = props;
   const pct = Math.round(value * 100);
   return (
-    <div className="flex-1 flex items-center gap-3 min-w-0">
-      <Zap
-        className="h-5 w-5 shrink-0 text-primary"
-        aria-hidden="true"
-      />
+    <div className="flex flex-1 items-center gap-2 min-w-0">
       <div className="flex-1 min-w-0">
         <Slider
           value={[pct]}
@@ -29,7 +24,10 @@ export default function PowerMeter(props: PowerMeterProps): JSX.Element {
           data-testid="slider-power"
         />
       </div>
-      <span className="font-mono text-sm w-10 text-right tabular-nums" data-testid="text-power">
+      <span
+        className="font-mono text-xs w-8 text-right tabular-nums text-muted-foreground"
+        data-testid="text-power"
+      >
         {pct}%
       </span>
     </div>

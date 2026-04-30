@@ -45,6 +45,7 @@ import type { GameState, Shot, Vec2 } from "@/lib/types";
 import HUD from "./HUD";
 import PowerMeter from "./PowerMeter";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 // =====================================================================
 // Ball appearance
@@ -225,7 +226,12 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
   /** Cue tip offset, normalized -1..1 across ball face. (0,0) = stun. */
   const [tipOffset, setTipOffset] = useState<Vec2>({ x: 0, y: 0 });
   const [animating, setAnimating] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<string>("Break time!");
+  const [statusMsg, setStatusMsgRaw] = useState<string>("Break time!");
+  const [statusSeq, setStatusSeq] = useState(0);
+  const setStatusMsg = useCallback((msg: string) => {
+    setStatusMsgRaw(msg);
+    setStatusSeq((n) => n + 1);
+  }, []);
 
   const animRef = useRef<AnimState>({ ballPositions: new Map(), active: false });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1235,7 +1241,6 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
     <div className="flex flex-col items-stretch w-full h-full">
       <HUD
         state={state}
-        statusMsg={statusMsg}
         myTurn={myTurn}
         mode={mode}
         localSeat={localSeat}
@@ -1268,6 +1273,7 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
         />
+        <StatusToast message={statusMsg} seq={statusSeq} />
         {state.pendingChoice && myChoice && !sendingChoice && (
           <PendingChoiceOverlay
             choice={state.pendingChoice}
@@ -1289,13 +1295,12 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
         )}
       </div>
 
-      <div className="px-3 pb-3 pt-2 flex items-center gap-3 bg-card/80 backdrop-blur border-t border-card-border">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-t border-card-border bg-card/80 px-2 backdrop-blur">
         <SpinSelector value={tipOffset} onChange={setTipOffset} disabled={!myTurn || animating} />
         <PowerMeter value={power} onChange={setPower} disabled={!myTurn || animating} />
         <Button
-          size="lg"
           variant="default"
-          className="h-12 px-6 font-semibold"
+          className="h-10 px-4 font-semibold shrink-0"
           onClick={triggerShot}
           disabled={
             !myTurn ||
@@ -1319,7 +1324,7 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
         {state.gameOver && (
           <Button
             variant="secondary"
-            className="h-12"
+            className="h-10 shrink-0"
             onClick={newGame}
             data-testid="button-new-game"
           >
@@ -1328,6 +1333,59 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
         )}
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Transient status toast: shows over the canvas for ~2.6s after the
+// status message changes, then auto-fades. The `seq` prop bumps every
+// time the parent calls setStatusMsg so even an identical message
+// (e.g. two consecutive "No pot — opponent's turn" outcomes) re-shows
+// and restarts the timer.
+//
+// Two render paths:
+//   - The visual toast over the canvas (transient, decorative).
+//   - A persistent `role="status" aria-live="polite"` sr-only mirror
+//     so screen-reader users always hear the latest status text even
+//     after the visual toast has faded. Keeps `data-testid="status-msg"`
+//     for e2e tests and pairs with the canvas-drawn HUD prompts which
+//     are otherwise inaccessible.
+// ---------------------------------------------------------------------
+function StatusToast(props: { message: string; seq: number }): JSX.Element {
+  const { message, seq } = props;
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!message) {
+      setVisible(false);
+      return;
+    }
+    setVisible(true);
+    const t = window.setTimeout(() => setVisible(false), 2600);
+    return () => window.clearTimeout(t);
+  }, [message, seq]);
+  return (
+    <>
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-1.5 flex justify-center transition-opacity duration-300",
+          visible ? "opacity-100" : "opacity-0",
+        )}
+        aria-hidden="true"
+      >
+        <div className="max-w-[90%] truncate rounded-md border border-card-border bg-card/85 px-3 py-1 text-xs text-foreground/90 shadow-sm">
+          {message}
+        </div>
+      </div>
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+        data-testid="status-msg"
+      >
+        {message}
+      </div>
+    </>
   );
 }
 
