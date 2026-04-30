@@ -1372,7 +1372,10 @@ function StatusToast(props: { message: string; seq: number }): JSX.Element {
         )}
         aria-hidden="true"
       >
-        <div className="max-w-[90%] truncate rounded-md border border-card-border bg-card/85 px-3 py-1 text-xs text-foreground/90 shadow-sm">
+        <div
+          className="max-w-[90%] truncate rounded-md border border-card-border bg-card/85 px-3 py-1 text-xs text-foreground/90 shadow-sm"
+          data-testid="status-msg"
+        >
           {message}
         </div>
       </div>
@@ -1381,7 +1384,6 @@ function StatusToast(props: { message: string; seq: number }): JSX.Element {
         aria-live="polite"
         aria-atomic="true"
         className="sr-only"
-        data-testid="status-msg"
       >
         {message}
       </div>
