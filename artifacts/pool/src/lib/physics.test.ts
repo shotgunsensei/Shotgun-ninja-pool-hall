@@ -328,3 +328,45 @@ describe("rack and table layout sanity", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------
+// Regression: hard cluster shots must always settle
+//
+// Before the runaway-velocity clamp + MAX_TICKS rest fallback, certain
+// max-power follow shots on a fresh rack would compound spin into vel
+// across sequential collisions, eject a ball past the cushion model,
+// and never come to rest — leaving the simulation running for the full
+// 6000-tick safety cap (~80s of UI "Waiting"). This test pins the fix.
+// ---------------------------------------------------------------------
+describe("simulation always settles on hard shots", () => {
+  const cases: { name: string; angle: number; tip?: Vec2 }[] = [
+    { name: "max + topspin (follow)", angle: 0, tip: { x: 0, y: -1 } },
+    { name: "max + draw", angle: 0, tip: { x: 0, y: 1 } },
+    { name: "max + side", angle: 0, tip: { x: 1, y: 0 } },
+    { name: "max + follow + side", angle: 0, tip: { x: 0.7, y: -0.7 } },
+    { name: "max diagonal + follow", angle: Math.PI / 3, tip: { x: 0, y: -1 } },
+  ];
+  for (const c of cases) {
+    test(`break shot: ${c.name} settles within budget and stays in play`, () => {
+      const state = makeInitialGameState(makeInitialBalls(), ["A", "B"]);
+      const sim = simulateShot(state, { angle: c.angle, power: 1.0, tipOffset: c.tip });
+      // 2000 ticks ≈ 27s playback at 1.25× — well below the 6000-tick
+      // MAX_TICKS cap. Every legitimate shot we measured finished in
+      // under 700 ticks; we leave headroom for future tuning.
+      expect(sim.ticks).toBeLessThan(2000);
+      for (const b of sim.finalState.balls) {
+        if (b.inPocket) continue;
+        // Settled.
+        expect(b.vel.x).toBe(0);
+        expect(b.vel.y).toBe(0);
+        // Inside the play area (within a ball radius of the rails).
+        // This guards against the "ball escapes the table" failure
+        // mode that caused the runaway in the first place.
+        expect(b.pos.x).toBeGreaterThanOrEqual(PLAY_LEFT - BALL_RADIUS);
+        expect(b.pos.x).toBeLessThanOrEqual(PLAY_RIGHT + BALL_RADIUS);
+        expect(b.pos.y).toBeGreaterThanOrEqual(PLAY_TOP - BALL_RADIUS);
+        expect(b.pos.y).toBeLessThanOrEqual(PLAY_BOTTOM + BALL_RADIUS);
+      }
+    });
+  }
+});

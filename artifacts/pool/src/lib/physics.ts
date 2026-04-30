@@ -146,6 +146,29 @@ const SIDESPIN_RAIL_RETENTION = 0.65;
 
 const MIN_SPEED = 0.05; // below this, snap to zero
 export const MAX_LAUNCH_SPEED = 38; // logical units / tick at full power
+/**
+ * Hard upper bounds on per-ball linear and spin speed. Real balls
+ * can't go faster than the cue gave them, but our spin/collision
+ * model can occasionally over-energize a ball when it gets caught in
+ * a tight cluster (e.g. a full rack break with strong follow): the
+ * spin → vel "kick" on each sequential contact compounds and can push
+ * a ball to several times MAX_LAUNCH_SPEED, which then escapes
+ * cushion containment and never settles, leaving the simulation to
+ * run to MAX_TICKS (~80s of frozen "Waiting" UI).
+ *
+ * Caps are split because the cue is launched with up to 1.7×
+ * MAX_LAUNCH_SPEED of intentional spin (full follow), so a single
+ * shared cap of 1.6× would silently trim every full-follow shot.
+ *
+ * - MAX_VEL_SPEED  = 1.7× — comfortably above legitimate spin-throw
+ *   on the object ball (which can briefly outrun the cue's residual)
+ *   while still cheap enough to bound runaway compounding.
+ * - MAX_SPIN_SPEED = 2.0× — leaves headroom above the 1.7× initial
+ *   follow spin, so launch is never trimmed and the kick model
+ *   keeps its dynamic range.
+ */
+const MAX_VEL_SPEED = MAX_LAUNCH_SPEED * 1.7;
+const MAX_SPIN_SPEED = MAX_LAUNCH_SPEED * 2.0;
 
 const PHYSICS_DT = 1; // virtual ticks; we use a fixed iteration loop
 const MAX_TICKS = 6000; // safety cap (~100s at 60Hz)
@@ -723,6 +746,34 @@ function adaptiveSubsteps(balls: SimBall[]): number {
   return Math.min(SUBSTEPS_MAX, Math.max(SUBSTEPS_MIN, required));
 }
 
+/**
+ * Cap any ball's speed to MAX_BALL_SPEED. See the comment on
+ * MAX_BALL_SPEED — without this, a tight cluster + heavy follow can
+ * compound spin-kicks across sequential collisions and produce a
+ * runaway ball that escapes the cushions and never settles.
+ *
+ * Direction is preserved; only magnitude is clamped, so legitimate
+ * spin-throw and post-contact direction effects are unaffected.
+ * Runs once per tick after the substep collisions and friction pass.
+ */
+function clampBallSpeeds(balls: SimBall[]): void {
+  for (const b of balls) {
+    if (b.inPocket) continue;
+    const sp = Math.hypot(b.vel.x, b.vel.y);
+    if (sp > MAX_VEL_SPEED) {
+      const k = MAX_VEL_SPEED / sp;
+      b.vel.x *= k;
+      b.vel.y *= k;
+    }
+    const spinSp = Math.hypot(b.spin.x, b.spin.y);
+    if (spinSp > MAX_SPIN_SPEED) {
+      const k = MAX_SPIN_SPEED / spinSp;
+      b.spin.x *= k;
+      b.spin.y *= k;
+    }
+  }
+}
+
 function stepBalls(
   balls: SimBall[],
   rollFriction: number,
@@ -735,6 +786,7 @@ function stepBalls(
     stepSubstep(balls, sdt, result);
   }
   applyFrictionAndSpin(balls, rollFriction, slideDecel);
+  clampBallSpeeds(balls);
   return result;
 }
 
@@ -901,6 +953,32 @@ export function simulateShot(
     }
 
     if (allStopped(balls)) break;
+  }
+
+  // Safety net: if the simulation hit MAX_TICKS without settling
+  // (e.g. a single rogue ball still moving below our snap thresholds
+  // due to a numerical edge case), force every ball to rest so the
+  // turn always returns to the player. Without this the UI sits in
+  // "Waiting" for the full ~80s playback and the next shot is
+  // disabled — exactly the bug users report on hard cluster shots.
+  if (!allStopped(balls)) {
+    for (const b of balls) {
+      if (b.inPocket) continue;
+      b.vel.x = 0;
+      b.vel.y = 0;
+      b.spin.x = 0;
+      b.spin.y = 0;
+      b.sideSpin = 0;
+      // If a ball managed to escape the cushion model entirely (the
+      // exact pathological case the velocity clamp now prevents, but
+      // we keep the safety net in case a future regression slips
+      // through), tug it back inside the play area so the next shot
+      // can use it.
+      if (b.pos.x < PLAY_LEFT + BALL_RADIUS) b.pos.x = PLAY_LEFT + BALL_RADIUS;
+      else if (b.pos.x > PLAY_RIGHT - BALL_RADIUS) b.pos.x = PLAY_RIGHT - BALL_RADIUS;
+      if (b.pos.y < PLAY_TOP + BALL_RADIUS) b.pos.y = PLAY_TOP + BALL_RADIUS;
+      else if (b.pos.y > PLAY_BOTTOM - BALL_RADIUS) b.pos.y = PLAY_BOTTOM - BALL_RADIUS;
+    }
   }
 
   if (recordFrames && (frames.length === 0 || frames[frames.length - 1]!.tick !== lastTick)) {
