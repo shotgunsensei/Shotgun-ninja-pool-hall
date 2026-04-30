@@ -1273,7 +1273,11 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
         />
-        <StatusToast message={statusMsg} seq={statusSeq} />
+        <StatusToast
+          message={statusMsg}
+          seq={statusSeq}
+          suppressVisible={!!state.pendingChoice}
+        />
         {state.pendingChoice && myChoice && !sendingChoice && (
           <PendingChoiceOverlay
             choice={state.pendingChoice}
@@ -1351,8 +1355,12 @@ export default function PoolGame(props: PoolGameProps): JSX.Element {
 //     for e2e tests and pairs with the canvas-drawn HUD prompts which
 //     are otherwise inaccessible.
 // ---------------------------------------------------------------------
-function StatusToast(props: { message: string; seq: number }): JSX.Element {
-  const { message, seq } = props;
+function StatusToast(props: {
+  message: string;
+  seq: number;
+  suppressVisible?: boolean;
+}): JSX.Element {
+  const { message, seq, suppressVisible } = props;
   const [visible, setVisible] = useState(false);
   useEffect(() => {
     if (!message) {
@@ -1363,12 +1371,13 @@ function StatusToast(props: { message: string; seq: number }): JSX.Element {
     const t = window.setTimeout(() => setVisible(false), 2600);
     return () => window.clearTimeout(t);
   }, [message, seq]);
+  const showVisible = visible && !suppressVisible;
   return (
     <>
       <div
         className={cn(
           "pointer-events-none absolute inset-x-0 top-1.5 flex justify-center transition-opacity duration-300",
-          visible ? "opacity-100" : "opacity-0",
+          showVisible ? "opacity-100" : "opacity-0",
         )}
         aria-hidden="true"
       >
