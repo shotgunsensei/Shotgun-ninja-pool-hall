@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { useSettings } from "@/lib/settings";
+import { DEFAULT_SETTINGS } from "@/lib/types";
 import { InstallSettingsRow } from "@/components/InstallPrompt";
 
 export default function SettingsPage(): JSX.Element {
@@ -95,6 +96,49 @@ export default function SettingsPage(): JSX.Element {
               onCheckedChange={(v) => setSettings({ vibration: v })}
               data-testid="switch-vibration"
             />
+          </CardContent>
+        </Card>
+
+
+
+        <Card>
+          <CardContent className="p-4 flex flex-col gap-4">
+            <div>
+              <Label className="text-sm font-semibold">Rules</Label>
+              <p className="text-xs text-muted-foreground">Gameplay variants for more competitive matches.</p>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label className="text-sm font-semibold">Call shot on 8-ball</Label>
+                <p className="text-xs text-muted-foreground">Must pocket the 8 in the called pocket to win.</p>
+              </div>
+              <Switch
+                checked={settings.callShotOn8}
+                onCheckedChange={(v) => setSettings({ callShotOn8: v })}
+                data-testid="switch-call-shot-on-8"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <Label className="text-sm font-semibold">Three-foul rule</Label>
+                <p className="text-xs text-muted-foreground">Three consecutive fouls by a player results in a loss.</p>
+              </div>
+              <Switch
+                checked={settings.threeFoulRule}
+                onCheckedChange={(v) => setSettings({ threeFoulRule: v })}
+                data-testid="switch-three-foul-rule"
+              />
+            </div>
+
+            <Button
+              variant="outline"
+              onClick={() => setSettings({ ...DEFAULT_SETTINGS })}
+              data-testid="button-reset-settings"
+            >
+              Restore defaults
+            </Button>
           </CardContent>
         </Card>
 
