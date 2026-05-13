@@ -112,6 +112,11 @@ export const RESTITUTION_RAIL = 0.78;
  *  full physical 5/7·v₀ instead of the ~0.63·v₀ produced by the old
  *  asymmetric impulse split. */
 const ROLL_FRICTION = 0.991;
+/** Additional speed-dependent rolling drag. Real balls lose slightly
+ *  more energy at higher rolling speeds due to cloth deformation and
+ *  micro-slip in the contact patch. This keeps power shots from
+ *  gliding unrealistically long while preserving touch shots. */
+const ROLL_DRAG_AT_MAX_SPEED = 0.004;
 /** Per-tick reduction of the contact-patch slip magnitude during the
  *  sliding phase. The slip impulse is shared between linear deceleration
  *  ({@link SLIDE_LINEAR_SHARE}) and spin acceleration
@@ -143,6 +148,10 @@ const SLIDE_SPIN_SHARE = 5 / 7;
 const SIDESPIN_DECAY_PER_TICK = 0.98;
 /** Multiplicative loss of sidespin on each rail bounce. */
 const SIDESPIN_RAIL_RETENTION = 0.65;
+/** Portion of the tangential rail slip converted into sidespin on
+ *  cushion contact. This models the cue-ball picking up/releasing
+ *  running English against the cushion cloth/rubber. */
+const RAIL_SLIP_TO_SIDE_SPIN = 0.018;
 
 const MIN_SPEED = 0.05; // below this, snap to zero
 export const MAX_LAUNCH_SPEED = 38; // logical units / tick at full power
@@ -545,11 +554,22 @@ function collideBallWithSegment(b: SimBall, s: Segment): { hit: boolean; speed: 
   b.vel.x -= (1 + e) * vn * nx;
   b.vel.y -= (1 + e) * vn * ny;
 
+  // Tangential rail slip couples linear motion and side spin. Running
+  // English tends to lengthen the rebound path; check English shortens
+  // it. We model this by bleeding some tangential post-bounce velocity
+  // into side spin and vice versa, bounded by low coefficients so it
+  // remains subtle and stable.
+  const tx = -ny;
+  const ty = nx;
+  const vt = b.vel.x * tx + b.vel.y * ty;
+  const sideCouple = vt * RAIL_SLIP_TO_SIDE_SPIN;
+  b.sideSpin += sideCouple;
+  b.vel.x -= tx * sideCouple * 0.55;
+  b.vel.y -= ty * sideCouple * 0.55;
+
   // Side spin biases the tangential component of the post-bounce
   // velocity slightly (very subtle — like a throw effect off the rail).
   if (b.sideSpin !== 0) {
-    const tx = -ny;
-    const ty = nx;
     const bias = b.sideSpin * speed * 0.04;
     b.vel.x += tx * bias;
     b.vel.y += ty * bias;
@@ -715,9 +735,15 @@ function applyFrictionAndSpin(balls: SimBall[], rollFriction: number, slideDecel
       b.spin.x += ux * dec * SLIDE_SPIN_SHARE;
       b.spin.y += uy * dec * SLIDE_SPIN_SHARE;
     } else {
-      // Rolling: snap spin to vel and apply rolling friction to both.
-      b.vel.x *= rollFriction;
-      b.vel.y *= rollFriction;
+      // Rolling: snap spin to vel and apply speed-dependent rolling
+      // resistance. This is closer to real cloth behavior than a purely
+      // constant multiplicative decay.
+      const speed = Math.hypot(b.vel.x, b.vel.y);
+      const t = Math.min(1, speed / MAX_LAUNCH_SPEED);
+      const dynamicDrag = 1 - ROLL_DRAG_AT_MAX_SPEED * t;
+      const f = Math.max(0.95, rollFriction * dynamicDrag);
+      b.vel.x *= f;
+      b.vel.y *= f;
       b.spin.x = b.vel.x;
       b.spin.y = b.vel.y;
     }
